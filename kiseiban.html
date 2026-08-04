@@ -241,12 +241,14 @@
       <span class="why" id="h4Why">データ取得中…</span>
     </div>
     <div id="h4Detail" style="font-family:var(--mono); font-size:12.5px; color:var(--brass); margin-top:10px;"></div>
+    <div id="h4Countdown" style="font-family:var(--mono); font-size:13px; color:var(--paper-dim); margin-top:8px;"></div>
     <div class="cfg-row">
       <label>ピンバー判定: ヒゲ/実体倍率<input type="number" id="pbWickMult" value="1.5" step="0.1" min="0.5"></label>
       <label>ヒゲ/レンジ比率<input type="number" id="pbWickRatio" value="0.5" step="0.05" min="0.1" max="0.95"></label>
+      <label><input type="checkbox" id="alertToggle" style="margin-right:6px;">条件成立を通知(音+ブラウザ通知)</label>
     </div>
     <div class="breakeven-note">
-      H4の重要ラインは、何度も反発している価格帯を自動検出したものです。データが少ないうちは信頼度が低く、数日分のデータが蓄積されるまでは参考程度に見てください。利確・損切りの目安も、あくまで直前のルールをそのまま数値化したもので、成功を保証するものではありません。ピンバー判定の閾値は上の欄で調整でき、設定はブラウザに保存されます。
+      H4の重要ラインは、何度も反発している価格帯を自動検出したものです。データが少ないうちは信頼度が低く、数日分のデータが蓄積されるまでは参考程度に見てください。利確・損切りの目安も、あくまで直前のルールをそのまま数値化したもので、成功を保証するものではありません。ピンバー判定の閾値は上の欄で調整でき、設定はブラウザに保存されます。「次の足の始まり」の残り時間はカウントダウンで、水準とピンバーの位置は価格チャート上にも表示されます。通知はあくまで「④条件成立」を知らせるだけで、エントリーを推奨するものではありません。
     </div>
   </div>
 
@@ -283,7 +285,7 @@
 
 <script>
 const PAIRS = ['USDJPY','EURJPY','GBPJPY'];
-const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false };
+const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false, lastH4Key:{USDJPY:null,EURJPY:null,GBPJPY:null} };
 let priceChart, rsiChart, winrateChart;
 
 function fmt(n, d=2){ return Number(n).toLocaleString('ja-JP',{minimumFractionDigits:d, maximumFractionDigits:d}); }
@@ -407,6 +409,7 @@ async function poll(){
     document.getElementById('chartLoading').classList.remove('error');
     render();
     PAIRS.forEach(saveCandles);
+    checkAllH4Alerts();
   }catch(e){
     state.pollFailCount++;
     showPollError(state.pollFailCount);
@@ -581,8 +584,7 @@ function analyzeH4M15(symbol){
   }
 }
 
-function renderH4M15(){
-  const r = analyzeH4M15(state.symbol);
+function renderH4M15(r){
   const tag = document.getElementById('h4Tag');
   const why = document.getElementById('h4Why');
   const detail = document.getElementById('h4Detail');
@@ -630,6 +632,85 @@ function renderH4M15(){
   }
 }
 
+// --- Entry timing: countdown to the next M15 candle, and an opt-in alert (sound +
+// browser notification) fired once when a symbol's H4×M15 status newly becomes 'signal' ---
+function updateH4Countdown(){
+  const el = document.getElementById('h4Countdown');
+  if(!el) return;
+  const bucketMs = 15*60000;
+  const now = Date.now();
+  const next = Math.ceil(now/bucketMs)*bucketMs;
+  const remain = Math.max(0, next-now);
+  const mm = String(Math.floor(remain/60000)).padStart(2,'0');
+  const ss = String(Math.floor((remain%60000)/1000)).padStart(2,'0');
+  el.textContent = `次のM15足の始まりまで ${mm}:${ss}`;
+}
+
+function playBeep(){
+  try{
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.value = 0.15;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    setTimeout(()=>{ osc.stop(); ctx.close(); }, 300);
+  }catch(e){ /* best effort */ }
+}
+
+function pairLabel(symbol){
+  return symbol==='USDJPY' ? 'USD/JPY' : symbol==='EURJPY' ? 'EUR/JPY' : 'GBP/JPY';
+}
+
+function notifyH4Signal(symbol, direction){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  try{
+    new Notification('気配盤 — 条件成立(参考)', {
+      body: `${pairLabel(symbol)}: ${direction==='long'?'LONG':'SHORT'}方向の条件が成立しました(参考情報。勝敗を保証するものではありません)。`,
+    });
+  }catch(e){ /* best effort */ }
+}
+
+function checkH4Alert(symbol, r){
+  const key = r.status + (r.direction ? ':'+r.direction : '');
+  const prevKey = state.lastH4Key[symbol];
+  state.lastH4Key[symbol] = key;
+  const toggle = document.getElementById('alertToggle');
+  if(!toggle || !toggle.checked) return;
+  if(r.status==='signal' && key!==prevKey){
+    playBeep();
+    notifyH4Signal(symbol, r.direction);
+  }
+}
+
+function checkAllH4Alerts(){
+  PAIRS.forEach(p=>{
+    checkH4Alert(p, analyzeH4M15(p));
+  });
+}
+
+function loadAlertConfig(){
+  try{
+    const toggle = document.getElementById('alertToggle');
+    toggle.checked = localStorage.getItem('kiseiban:alertEnabled') === '1';
+  }catch(e){ /* best effort */ }
+}
+
+document.getElementById('alertToggle').addEventListener('change', (e)=>{
+  try{ localStorage.setItem('kiseiban:alertEnabled', e.target.checked ? '1' : '0'); }catch(err){ /* best effort */ }
+  if(e.target.checked && 'Notification' in window && Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+});
+
+setInterval(updateH4Countdown, 1000);
+updateH4Countdown();
+
 function render(){
   const candles1m = state.candlesAll[state.symbol];
   const candles = resample(candles1m, parseInt(state.interval,10));
@@ -649,13 +730,15 @@ function render(){
   const ema20v = ema(closes,state.emaPeriod);
   const rsiVals = rsi(closes,14);
 
+  const h4Result = analyzeH4M15(state.symbol);
+
   if(closes.length){
-    renderPriceChart(times, closes, sma9v, sma21v, ema20v);
+    renderPriceChart(times, closes, sma9v, sma21v, ema20v, h4Result);
   }
   renderRsiChart(times, rsiVals);
   updateStats(closes, sma9v, sma21v, rsiVals, ema20v);
   updateSignal(sma9v, sma21v, rsiVals, closes.length);
-  renderH4M15();
+  renderH4M15(h4Result);
 }
 
 async function startFeed(){
@@ -669,7 +752,61 @@ function labelize(times){
   return times.map(t => t.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
 }
 
-function renderPriceChart(times, closes, sma9, sma21, ema20){
+function nearestIndex(times, targetMs){
+  let bestIdx = -1, bestDiff = Infinity;
+  times.forEach((t,i)=>{
+    const diff = Math.abs(t.getTime()-targetMs);
+    if(diff < bestDiff){ bestDiff = diff; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
+function buildH4MarkerDatasets(times, closes, h4Result){
+  const datasets = [];
+  if(!h4Result || !h4Result.level) return datasets;
+
+  datasets.push({
+    label:'H4水準',
+    data: closes.map(()=>h4Result.level.price),
+    borderColor:'#c9a227',
+    borderWidth:1,
+    borderDash:[6,4],
+    pointRadius:0,
+    tension:0,
+  });
+
+  if(h4Result.breakoutTime || h4Result.pinbarTime){
+    const breakoutTime = h4Result.breakoutTime ?? h4Result.pinbarTime;
+    const idx = nearestIndex(times, breakoutTime);
+    if(idx >= 0){
+      const data = new Array(closes.length).fill(null);
+      data[idx] = closes[idx];
+      datasets.push({
+        label: h4Result.direction==='short' ? 'ブレイク(下抜け)' : 'ブレイク(上抜け)',
+        data, showLine:false,
+        pointRadius:5, pointStyle:'rectRot',
+        borderColor:'#7fb8d9', backgroundColor:'#7fb8d9',
+      });
+    }
+  }
+  if(h4Result.status==='signal' && h4Result.pinbarTime){
+    const idx = nearestIndex(times, h4Result.pinbarTime);
+    if(idx >= 0){
+      const data = new Array(closes.length).fill(null);
+      data[idx] = closes[idx];
+      const color = h4Result.direction==='long' ? '#4fae7a' : '#c0546a';
+      datasets.push({
+        label: h4Result.direction==='long' ? 'ピンバー(LONG)' : 'ピンバー(SHORT)',
+        data, showLine:false,
+        pointRadius:7, pointStyle:'triangle',
+        borderColor:color, backgroundColor:color,
+      });
+    }
+  }
+  return datasets;
+}
+
+function renderPriceChart(times, closes, sma9, sma21, ema20, h4Result){
   const labels = labelize(times);
   const last = closes[closes.length-1];
   const prev = closes[closes.length-2] ?? last;
@@ -689,6 +826,7 @@ function renderPriceChart(times, closes, sma9, sma21, ema20){
       { label:'SMA9', data:sma9, borderColor:'#c9a227', borderWidth:1.5, pointRadius:0, tension:0.15 },
       { label:'SMA21', data:sma21, borderColor:'#4fae7a', borderWidth:1.5, pointRadius:0, tension:0.15 },
       { label:`EMA${state.emaPeriod}`, data:ema20, borderColor:'#7fb8d9', borderWidth:1.5, borderDash:[3,3], pointRadius:0, tension:0.15 },
+      ...buildH4MarkerDatasets(times, closes, h4Result),
     ]},
     options:{
       responsive:true,
@@ -901,6 +1039,7 @@ setInterval(tickClock, 1000);
 tickClock();
 
 loadPinbarConfig();
+loadAlertConfig();
 startFeed();
 loadTrades();
 </script>

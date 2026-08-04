@@ -164,6 +164,12 @@
 
   .empty{color:var(--paper-dim); font-size:13px; padding:20px 0; text-align:center;}
   .loading{color:var(--paper-dim); font-size:13px; padding:12px 0;}
+  .loading.error{color:var(--down);}
+  .cfg-row{display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--paper-dim);}
+  .cfg-row input[type=number]{
+    background:var(--panel-2); border:1px solid var(--hair); color:var(--paper);
+    font-family:var(--mono); padding:6px 8px; border-radius:6px; width:64px; margin-left:6px;
+  }
   footer{padding:20px 18px 0; color:var(--paper-dim); font-size:11px; text-align:center;}
 </style>
 </head>
@@ -190,6 +196,8 @@
   <button class="pill" data-interval="15">15分足</button>
   <button class="pill active" data-interval="30">30分足</button>
   <button class="pill" data-interval="60">60分足</button>
+  <button class="pill" data-ema="10">EMA10</button>
+  <button class="pill active" data-ema="20">EMA20</button>
 </div>
 <div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
   無料データ源の制約上、過去のチャート履歴は取得できません。このページを開いている間、実際のレートを記録して少しずつチャートを作っていきます（記録は保存され、次回以降も引き継がれます）。指標が表示されるまで、しばらく時間がかかります。
@@ -214,7 +222,7 @@
       <div class="stat"><div class="k">RSI</div><div class="v" id="rsiVal">—</div></div>
       <div class="stat"><div class="k">SMA9</div><div class="v" id="sma9Val">—</div></div>
       <div class="stat"><div class="k">SMA21</div><div class="v" id="sma21Val">—</div></div>
-      <div class="stat"><div class="k">EMA20</div><div class="v" id="ema20Val">—</div></div>
+      <div class="stat"><div class="k" id="emaLabel">EMA20</div><div class="v" id="ema20Val">—</div></div>
     </div>
   </div>
 
@@ -227,14 +235,18 @@
   </div>
 
   <div class="card">
-    <h2>H4×M15 手法（①ライン特定→②実体ブレイク→③押し目→④ピンバー）</h2>
+    <h2>H4×M15 手法（①ライン特定→②実体ブレイク→③押し目/戻り→④ピンバー）</h2>
     <div class="signal">
       <span class="tag wait" id="h4Tag">様子見</span>
       <span class="why" id="h4Why">データ取得中…</span>
     </div>
     <div id="h4Detail" style="font-family:var(--mono); font-size:12.5px; color:var(--brass); margin-top:10px;"></div>
+    <div class="cfg-row">
+      <label>ピンバー判定: ヒゲ/実体倍率<input type="number" id="pbWickMult" value="1.5" step="0.1" min="0.5"></label>
+      <label>ヒゲ/レンジ比率<input type="number" id="pbWickRatio" value="0.5" step="0.05" min="0.1" max="0.95"></label>
+    </div>
     <div class="breakeven-note">
-      H4の重要ラインは、何度も反発している価格帯を自動検出したものです。データが少ないうちは信頼度が低く、数日分のデータが蓄積されるまでは参考程度に見てください。利確・損切りの目安も、あくまで直前のルールをそのまま数値化したもので、成功を保証するものではありません。
+      H4の重要ラインは、何度も反発している価格帯を自動検出したものです。データが少ないうちは信頼度が低く、数日分のデータが蓄積されるまでは参考程度に見てください。利確・損切りの目安も、あくまで直前のルールをそのまま数値化したもので、成功を保証するものではありません。ピンバー判定の閾値は上の欄で調整でき、設定はブラウザに保存されます。
     </div>
   </div>
 
@@ -242,17 +254,25 @@
     <h2>記録帳 <span id="tradeCount" style="color:var(--paper-dim); font-weight:400;"></span></h2>
     <div class="journal-input">
       <input type="number" id="amountInput" placeholder="金額(円・任意)" min="0">
+      <input type="number" id="pipsInput" placeholder="pips損益(任意)" step="0.1">
+      <input type="number" id="rInput" placeholder="R倍率(任意)" step="0.1">
       <button class="btn-win" id="btnWin">勝ち を記録</button>
       <button class="btn-loss" id="btnLoss">負け を記録</button>
       <button class="btn-reset" id="btnReset">記録をリセット</button>
     </div>
     <canvas id="winrateChart" height="120"></canvas>
     <div id="journalEmpty" class="empty">まだ記録がありません。取引の結果をここに記録すると、勝率の推移が見えてきます。</div>
+    <div class="stat-grid" id="pipsStatGrid" style="display:none;">
+      <div class="stat"><div class="k">合計pips</div><div class="v" id="pipsTotal">—</div></div>
+      <div class="stat"><div class="k">平均pips</div><div class="v" id="pipsAvg">—</div></div>
+      <div class="stat"><div class="k">平均R倍率</div><div class="v" id="rAvg">—</div></div>
+      <div class="stat"><div class="k">期待値(R)</div><div class="v" id="rExpectancy">—</div></div>
+    </div>
     <div class="breakeven-note">
-      ペイアウト率<b>85%</b>の場合、損益分岐点となる勝率は <b>約54.1%</b>（1÷1.85）です。折れ線がこの水準を継続的に上回るかどうかが、実力か偶然かを見分ける目安になります。回数が少ないうちは大きくブレるので、最低でも50〜100回は記録することをおすすめします。
+      ペイアウト率<b>85%</b>の場合、損益分岐点となる勝率は <b>約54.1%</b>（1÷1.85）です。折れ線がこの水準を継続的に上回るかどうかが、実力か偶然かを見分ける目安になります。回数が少ないうちは大きくブレるので、最低でも50〜100回は記録することをおすすめします。pips・R倍率は任意入力です。入力した回のみ集計に使われます。
     </div>
     <table class="hist" id="histTable" style="display:none;">
-      <thead><tr><th>#</th><th>結果</th><th>金額</th><th>時刻</th></tr></thead>
+      <thead><tr><th>#</th><th>結果</th><th>金額</th><th>pips</th><th>R</th><th>時刻</th></tr></thead>
       <tbody id="histBody"></tbody>
     </table>
   </div>
@@ -263,7 +283,7 @@
 
 <script>
 const PAIRS = ['USDJPY','EURJPY','GBPJPY'];
-const state = { symbol:'USDJPY', interval:'30', trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null };
+const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false };
 let priceChart, rsiChart, winrateChart;
 
 function fmt(n, d=2){ return Number(n).toLocaleString('ja-JP',{minimumFractionDigits:d, maximumFractionDigits:d}); }
@@ -348,7 +368,23 @@ async function saveCandles(pair){
   }catch(e){ /* best effort — storage may be full or unavailable */ }
 }
 
+function scheduleRetry(){
+  if(state.pollRetryTimer) clearTimeout(state.pollRetryTimer);
+  const delay = Math.min(5000 * Math.pow(2, state.pollFailCount-1), 60000); // 5s,10s,20s,40s,60s cap
+  state.pollRetryTimer = setTimeout(poll, delay);
+}
+
+function showPollError(count){
+  const loading = document.getElementById('chartLoading');
+  loading.style.display='block';
+  loading.classList.add('error');
+  const now = new Date().toLocaleTimeString('ja-JP');
+  loading.textContent = `データ取得に失敗しました(${count}回連続, 最終試行 ${now})。自動的に再試行します。`;
+}
+
 async function poll(){
+  if(state.polling) return;
+  state.polling = true;
   try{
     const rates = await fetchQuote();
     const now = Date.now();
@@ -366,12 +402,17 @@ async function poll(){
         arr.push({ t:minuteStart, o:r.rate, h:r.rate, l:r.rate, c:r.rate });
       }
     });
+    state.pollFailCount = 0;
+    if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer=null; }
+    document.getElementById('chartLoading').classList.remove('error');
     render();
     PAIRS.forEach(saveCandles);
   }catch(e){
-    const loading = document.getElementById('chartLoading');
-    loading.style.display='block';
-    loading.textContent = 'データ取得に失敗しました。しばらくして自動的に再試行します。';
+    state.pollFailCount++;
+    showPollError(state.pollFailCount);
+    scheduleRetry();
+  } finally {
+    state.polling = false;
   }
 }
 
@@ -425,6 +466,35 @@ function clusterLevels(pivots, tolerance){
   return clusters.filter(c => c.touches >= 2);
 }
 
+function getPinbarConfig(){
+  const wickMult = parseFloat(document.getElementById('pbWickMult').value);
+  const wickRatio = parseFloat(document.getElementById('pbWickRatio').value);
+  return {
+    wickMult: isNaN(wickMult) ? 1.5 : wickMult,
+    wickRatio: isNaN(wickRatio) ? 0.5 : wickRatio,
+  };
+}
+
+function loadPinbarConfig(){
+  try{
+    const raw = localStorage.getItem('kiseiban:pinbarCfg');
+    if(raw){
+      const cfg = JSON.parse(raw);
+      if(cfg.wickMult!=null) document.getElementById('pbWickMult').value = cfg.wickMult;
+      if(cfg.wickRatio!=null) document.getElementById('pbWickRatio').value = cfg.wickRatio;
+    }
+  }catch(e){ /* best effort */ }
+}
+
+function savePinbarConfig(){
+  try{
+    localStorage.setItem('kiseiban:pinbarCfg', JSON.stringify(getPinbarConfig()));
+  }catch(e){ /* best effort */ }
+}
+
+// --- H4×M15 strategy: find a reaction level on H4, confirm a body breakout on M15
+// (either direction), wait for a pullback to the level, and look for a pin bar
+// there — bullish (long) after an upside break, bearish (short) after a downside break ---
 function analyzeH4M15(symbol){
   const candles1m = state.candlesAll[symbol];
   if(!candles1m.length) return { status:'building', h4count:0, needed:12 };
@@ -441,28 +511,74 @@ function analyzeH4M15(symbol){
   const level = levels[0];
 
   const m15 = resample(candles1m, 15, 200);
-  let breakoutIdx = -1;
+
+  // Track the last upward cross and the last downward cross independently. A pullback
+  // after a breakout normally re-crosses the level on its way back — that must not be
+  // mistaken for a fresh breakout in the opposite direction, so each direction's most
+  // recent breakout is evaluated on its own, forward from its own index.
+  let lastUpIdx = -1, lastDownIdx = -1;
   for(let i=1;i<m15.length;i++){
-    if(m15[i-1].c <= level.price && m15[i].c > level.price) breakoutIdx = i;
+    if(m15[i-1].c <= level.price && m15[i].c > level.price) lastUpIdx = i;
+    if(m15[i-1].c >= level.price && m15[i].c < level.price) lastDownIdx = i;
   }
-  if(breakoutIdx === -1) return { status:'level_found', level, price };
+  if(lastUpIdx === -1 && lastDownIdx === -1) return { status:'level_found', level, price };
 
-  let pinbarIdx = -1;
-  for(let i=breakoutIdx+1;i<m15.length;i++){
-    const c = m15[i];
-    const body = Math.abs(c.c-c.o);
-    const range = c.h-c.l;
-    const lowerWick = Math.min(c.o,c.c)-c.l;
-    const nearLevel = c.l <= level.price + tolerance*0.4 && c.l >= level.price - tolerance*1.5;
-    const isPinbar = range>0 && lowerWick >= body*1.5 && (lowerWick/range) >= 0.5 && c.c >= c.o;
-    if(nearLevel && isPinbar) pinbarIdx = i;
+  const pb = getPinbarConfig();
+  function findPinbar(breakoutIdx, direction){
+    let pinbarIdx = -1;
+    for(let i=breakoutIdx+1;i<m15.length;i++){
+      const c = m15[i];
+      const body = Math.abs(c.c-c.o);
+      const range = c.h-c.l;
+      if(range<=0) continue;
+      if(direction==='long'){
+        const lowerWick = Math.min(c.o,c.c)-c.l;
+        const nearLevel = c.l <= level.price + tolerance*0.4 && c.l >= level.price - tolerance*1.5;
+        const isPinbar = lowerWick >= body*pb.wickMult && (lowerWick/range) >= pb.wickRatio && c.c >= c.o;
+        if(nearLevel && isPinbar) pinbarIdx = i;
+      } else {
+        const upperWick = c.h - Math.max(c.o,c.c);
+        const nearLevel = c.h >= level.price - tolerance*0.4 && c.h <= level.price + tolerance*1.5;
+        const isPinbar = upperWick >= body*pb.wickMult && (upperWick/range) >= pb.wickRatio && c.c <= c.o;
+        if(nearLevel && isPinbar) pinbarIdx = i;
+      }
+    }
+    return pinbarIdx;
   }
-  if(pinbarIdx === -1) return { status:'breakout', level, breakoutTime:m15[breakoutIdx].t };
 
+  const longEval = lastUpIdx !== -1 ? { breakoutIdx:lastUpIdx, pinbarIdx: findPinbar(lastUpIdx,'long') } : null;
+  const shortEval = lastDownIdx !== -1 ? { breakoutIdx:lastDownIdx, pinbarIdx: findPinbar(lastDownIdx,'short') } : null;
+
+  // Prefer a completed signal; if both directions signal, the more recent pin bar wins.
+  // Otherwise prefer whichever breakout is more recent (still just "waiting" for a pin bar).
+  let direction, chosen;
+  const longSignals = !!(longEval && longEval.pinbarIdx !== -1);
+  const shortSignals = !!(shortEval && shortEval.pinbarIdx !== -1);
+  if(longSignals && shortSignals){
+    direction = longEval.pinbarIdx >= shortEval.pinbarIdx ? 'long' : 'short';
+    chosen = direction==='long' ? longEval : shortEval;
+  } else if(longSignals){
+    direction = 'long'; chosen = longEval;
+  } else if(shortSignals){
+    direction = 'short'; chosen = shortEval;
+  } else {
+    direction = lastUpIdx >= lastDownIdx ? 'long' : 'short';
+    chosen = direction==='long' ? longEval : shortEval;
+  }
+
+  if(chosen.pinbarIdx === -1) return { status:'breakout', level, breakoutTime:m15[chosen.breakoutIdx].t, direction };
+
+  const pinbarIdx = chosen.pinbarIdx;
   const lookback = m15.slice(Math.max(0,pinbarIdx-30), pinbarIdx);
-  const tp = lookback.length ? Math.max(...lookback.map(c=>c.h)) : level.price + tolerance*2;
-  const sl = level.price - 0.10; // 10 pips below the level, JPY pairs
-  return { status:'signal', level, tp, sl, pinbarTime:m15[pinbarIdx].t, price };
+  if(direction==='long'){
+    const tp = lookback.length ? Math.max(...lookback.map(c=>c.h)) : level.price + tolerance*2;
+    const sl = level.price - 0.10; // 10 pips below the level, JPY pairs
+    return { status:'signal', direction, level, tp, sl, pinbarTime:m15[pinbarIdx].t, price };
+  } else {
+    const tp = lookback.length ? Math.min(...lookback.map(c=>c.l)) : level.price - tolerance*2;
+    const sl = level.price + 0.10; // 10 pips above the level, JPY pairs
+    return { status:'signal', direction, level, tp, sl, pinbarTime:m15[pinbarIdx].t, price };
+  }
 }
 
 function renderH4M15(){
@@ -490,15 +606,27 @@ function renderH4M15(){
     return;
   }
   if(r.status==='breakout'){
-    tag.className='tag wait'; tag.textContent='②ブレイク確認・押し目待ち';
-    why.textContent=`${fmt(r.level.price,3)}を実体で上抜けました。すぐには飛びつかず、この水準まで戻ってピンバーが出るのを待っている段階です。`;
+    tag.className='tag wait';
+    if(r.direction==='long'){
+      tag.textContent='②ブレイク確認・押し目待ち(LONG)';
+      why.textContent=`${fmt(r.level.price,3)}を実体で上抜けました。すぐには飛びつかず、この水準まで戻って陽線のピンバーが出るのを待っている段階です。`;
+    } else {
+      tag.textContent='②ブレイク確認・戻り待ち(SHORT)';
+      why.textContent=`${fmt(r.level.price,3)}を実体で下抜けました。すぐには飛びつかず、この水準まで戻って陰線のピンバーが出るのを待っている段階です。`;
+    }
     detail.textContent='';
     return;
   }
   if(r.status==='signal'){
-    tag.className='tag high'; tag.textContent='④条件成立(参考)';
-    why.textContent=`${fmt(r.level.price,3)}まで押し目が入り、ピンバーを確認しました。次の足の始まりが、このルールでのロング検討タイミングです。`;
-    detail.textContent = `利確目安: ${fmt(r.tp,3)}(直近レジスタンス) ／ 損切り目安: ${fmt(r.sl,3)}(ライン-10pips)`;
+    if(r.direction==='long'){
+      tag.className='tag high'; tag.textContent='④条件成立(参考) LONG';
+      why.textContent=`${fmt(r.level.price,3)}まで押し目が入り、陽線のピンバーを確認しました。次の足の始まりが、このルールでのロング検討タイミングです。`;
+      detail.textContent = `利確目安: ${fmt(r.tp,3)}(直近レジスタンス) ／ 損切り目安: ${fmt(r.sl,3)}(ライン-10pips)`;
+    } else {
+      tag.className='tag low'; tag.textContent='④条件成立(参考) SHORT';
+      why.textContent=`${fmt(r.level.price,3)}まで戻りが入り、陰線のピンバーを確認しました。次の足の始まりが、このルールでのショート検討タイミングです。`;
+      detail.textContent = `利確目安: ${fmt(r.tp,3)}(直近サポート) ／ 損切り目安: ${fmt(r.sl,3)}(ライン+10pips)`;
+    }
   }
 }
 
@@ -518,7 +646,7 @@ function render(){
   const times = candles.map(c=>new Date(c.t));
   const sma9v = sma(closes,9);
   const sma21v = sma(closes,21);
-  const ema20v = ema(closes,20);
+  const ema20v = ema(closes,state.emaPeriod);
   const rsiVals = rsi(closes,14);
 
   if(closes.length){
@@ -560,7 +688,7 @@ function renderPriceChart(times, closes, sma9, sma21, ema20){
       { label:'価格', data:closes, borderColor:'#e9e3d3', borderWidth:1.5, pointRadius:0, tension:0.15 },
       { label:'SMA9', data:sma9, borderColor:'#c9a227', borderWidth:1.5, pointRadius:0, tension:0.15 },
       { label:'SMA21', data:sma21, borderColor:'#4fae7a', borderWidth:1.5, pointRadius:0, tension:0.15 },
-      { label:'EMA20', data:ema20, borderColor:'#7fb8d9', borderWidth:1.5, borderDash:[3,3], pointRadius:0, tension:0.15 },
+      { label:`EMA${state.emaPeriod}`, data:ema20, borderColor:'#7fb8d9', borderWidth:1.5, borderDash:[3,3], pointRadius:0, tension:0.15 },
     ]},
     options:{
       responsive:true,
@@ -603,6 +731,7 @@ function updateStats(closes, sma9, sma21, rsiVals, ema20){
   document.getElementById('sma9Val').textContent = lastSma9!==undefined ? fmt(lastSma9,1) : '—';
   document.getElementById('sma21Val').textContent = lastSma21!==undefined ? fmt(lastSma21,1) : '—';
   document.getElementById('ema20Val').textContent = lastEma20!==undefined ? fmt(lastEma20,1) : '—';
+  document.getElementById('emaLabel').textContent = `EMA${state.emaPeriod}`;
 }
 
 function updateSignal(sma9, sma21, rsiVals, dataLen){
@@ -647,9 +776,19 @@ async function saveTrades(){
 
 function addTrade(result){
   const amount = parseFloat(document.getElementById('amountInput').value) || null;
-  state.trades.push({ result, amount, t: Date.now() });
+  const pipsRaw = parseFloat(document.getElementById('pipsInput').value);
+  const rRaw = parseFloat(document.getElementById('rInput').value);
+  state.trades.push({
+    result,
+    amount,
+    pips: isNaN(pipsRaw) ? null : pipsRaw,
+    r: isNaN(rRaw) ? null : rRaw,
+    t: Date.now()
+  });
   saveTrades();
   renderJournal();
+  document.getElementById('pipsInput').value = '';
+  document.getElementById('rInput').value = '';
 }
 
 function renderJournal(){
@@ -663,9 +802,26 @@ function renderJournal(){
   trades.slice().reverse().slice(0,30).forEach((tr, idx) => {
     const n = trades.length - idx;
     const tr_el = document.createElement('tr');
-    tr_el.innerHTML = `<td>${n}</td><td class="${tr.result==='win'?'win':'loss'}">${tr.result==='win'?'勝ち':'負け'}</td><td>${tr.amount ? '¥'+tr.amount.toLocaleString() : '—'}</td><td>${new Date(tr.t).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>`;
+    const pipsTxt = tr.pips!=null ? (tr.pips>0?'+':'')+fmt(tr.pips,1) : '—';
+    const rTxt = tr.r!=null ? (tr.r>0?'+':'')+fmt(tr.r,2) : '—';
+    tr_el.innerHTML = `<td>${n}</td><td class="${tr.result==='win'?'win':'loss'}">${tr.result==='win'?'勝ち':'負け'}</td><td>${tr.amount ? '¥'+tr.amount.toLocaleString() : '—'}</td><td>${pipsTxt}</td><td>${rTxt}</td><td>${new Date(tr.t).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>`;
     body.appendChild(tr_el);
   });
+
+  const pipsTrades = trades.filter(tr=>tr.pips!=null);
+  const rTrades = trades.filter(tr=>tr.r!=null);
+  const pipsGrid = document.getElementById('pipsStatGrid');
+  if(pipsTrades.length || rTrades.length){
+    pipsGrid.style.display = 'grid';
+    const pipsSum = pipsTrades.reduce((s,tr)=>s+tr.pips,0);
+    const rSum = rTrades.reduce((s,tr)=>s+tr.r,0);
+    document.getElementById('pipsTotal').textContent = pipsTrades.length ? (pipsSum>0?'+':'')+fmt(pipsSum,1) : '—';
+    document.getElementById('pipsAvg').textContent = pipsTrades.length ? (pipsSum/pipsTrades.length>0?'+':'')+fmt(pipsSum/pipsTrades.length,1) : '—';
+    document.getElementById('rAvg').textContent = rTrades.length ? (rSum/rTrades.length>0?'+':'')+fmt(rSum/rTrades.length,2) : '—';
+    document.getElementById('rExpectancy').textContent = rTrades.length ? (rSum/rTrades.length>0?'+':'')+fmt(rSum/rTrades.length,2) : '—';
+  } else {
+    pipsGrid.style.display = 'none';
+  }
 
   // cumulative win rate
   const cum = [];
@@ -722,12 +878,29 @@ document.querySelectorAll('button.pill[data-interval]').forEach(btn=>{
   });
 });
 
+document.querySelectorAll('button.pill[data-ema]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('button.pill[data-ema]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.emaPeriod = parseInt(btn.dataset.ema,10);
+    render();
+  });
+});
+
+['pbWickMult','pbWickRatio'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    savePinbarConfig();
+    render();
+  });
+});
+
 function tickClock(){
   document.getElementById('clock').textContent = new Date().toLocaleTimeString('ja-JP');
 }
 setInterval(tickClock, 1000);
 tickClock();
 
+loadPinbarConfig();
 startFeed();
 loadTrades();
 </script>

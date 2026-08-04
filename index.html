@@ -376,12 +376,13 @@ function scheduleRetry(){
   state.pollRetryTimer = setTimeout(poll, delay);
 }
 
-function showPollError(count){
+function showPollError(count, err){
   const loading = document.getElementById('chartLoading');
   loading.style.display='block';
   loading.classList.add('error');
   const now = new Date().toLocaleTimeString('ja-JP');
-  loading.textContent = `データ取得に失敗しました(${count}回連続, 最終試行 ${now})。自動的に再試行します。`;
+  const detail = err && err.message ? ` [詳細: ${err.name || 'Error'}: ${err.message}]` : '';
+  loading.textContent = `データ取得に失敗しました(${count}回連続, 最終試行 ${now})。自動的に再試行します。${detail}`;
 }
 
 async function poll(){
@@ -412,7 +413,7 @@ async function poll(){
     checkAllH4Alerts();
   }catch(e){
     state.pollFailCount++;
-    showPollError(state.pollFailCount);
+    showPollError(state.pollFailCount, e);
     scheduleRetry();
   } finally {
     state.polling = false;

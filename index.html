@@ -170,6 +170,10 @@
     background:var(--panel-2); border:1px solid var(--hair); color:var(--paper);
     font-family:var(--mono); padding:6px 8px; border-radius:6px; width:64px; margin-left:6px;
   }
+  .cfg-row input[type=text]{
+    background:var(--panel-2); border:1px solid var(--hair); color:var(--paper);
+    font-family:var(--mono); padding:6px 8px; border-radius:6px; margin-left:6px;
+  }
   footer{padding:20px 18px 0; color:var(--paper-dim); font-size:11px; text-align:center;}
 </style>
 </head>
@@ -201,6 +205,12 @@
 </div>
 <div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
   無料データ源の制約上、過去のチャート履歴は取得できません。このページを開いている間、実際のレートを記録して少しずつチャートを作っていきます（記録は保存され、次回以降も引き継がれます）。指標が表示されるまで、しばらく時間がかかります。
+</div>
+<div class="cfg-row" style="padding:0 18px 14px; margin-top:0;">
+  <label>データ取得プロキシURL(CORS対策・任意)<input type="text" id="proxyUrlInput" placeholder="https://xxxx.workers.dev" style="width:260px;"></label>
+</div>
+<div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
+  freeforexapi.comはブラウザからの直接アクセス(CORS)に対応していないため、GitHub Pages上ではレート取得に失敗し続けることがあります。回避するには、リポジトリ同梱の<code>cors-proxy-worker.js</code>をCloudflare Workers等にデプロイし、発行されたURLを上の欄に貼り付けてください（未設定の場合は従来通りfreeforexapi.comに直接アクセスします）。
 </div>
 
 <section>
@@ -344,8 +354,30 @@ function rsi(closes, period=14){
 }
 
 // --- Live rate polling + local candle building (free no-key source has no historical intraday data) ---
+const DIRECT_QUOTE_URL = 'https://www.freeforexapi.com/api/live?pairs=USDJPY,EURJPY,GBPJPY';
+
+function getProxyUrl(){
+  try{ return (localStorage.getItem('kiseiban:proxyUrl') || '').trim(); }catch(e){ return ''; }
+}
+
+function loadProxyConfig(){
+  try{
+    document.getElementById('proxyUrlInput').value = getProxyUrl();
+  }catch(e){ /* best effort */ }
+}
+
+document.getElementById('proxyUrlInput').addEventListener('change', (e)=>{
+  try{ localStorage.setItem('kiseiban:proxyUrl', e.target.value.trim()); }catch(err){ /* best effort */ }
+  state.pollFailCount = 0;
+  if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer=null; }
+  poll();
+});
+
 async function fetchQuote(){
-  const url = `https://www.freeforexapi.com/api/live?pairs=USDJPY,EURJPY,GBPJPY`;
+  // freeforexapi.com does not support CORS from a browser origin (e.g. GitHub Pages),
+  // so a user-supplied server-side proxy (see cors-proxy-worker.js) can stand in for it.
+  const proxy = getProxyUrl();
+  const url = proxy || DIRECT_QUOTE_URL;
   const res = await fetch(url);
   const data = await res.json();
   return data.rates; // { USDJPY:{rate,timestamp}, ... }
@@ -1041,6 +1073,7 @@ tickClock();
 
 loadPinbarConfig();
 loadAlertConfig();
+loadProxyConfig();
 startFeed();
 loadTrades();
 </script>

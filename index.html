@@ -210,7 +210,7 @@
   <label>データ取得プロキシURL(CORS対策・任意)<input type="text" id="proxyUrlInput" placeholder="https://xxxx.workers.dev" style="width:260px;"></label>
 </div>
 <div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
-freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザからの直接アクセス(CORS)にも対応していないため、GitHub Pages上ではレート取得に失敗し続けます。リポジトリ同梱の<code>cors-proxy-worker.js</code>(OANDAプラクティス口座のレート配信APIを使う版)をCloudflare Workersにデプロイし、発行されたURLを上の欄に貼り付けてください（OANDAの無料プラクティス口座のAPIトークン・account IDが別途必要です。詳しくはファイル冒頭のコメントを参照。未設定の場合は従来通りfreeforexapi.comへの直接アクセスを試みますが、動作しない可能性が高いです）。
+freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザからの直接アクセス(CORS)にも対応していないため、GitHub Pages上ではレート取得に失敗し続けます。リポジトリ同梱の<code>cors-proxy-worker.js</code>(OANDA証券のプラクティス口座APIを使う版)をCloudflare Workersにデプロイし、発行されたURLを上の欄に貼り付けてください（OANDA証券の無料プラクティス口座のAPIトークンが別途必要です。詳しくはファイル冒頭のコメントを参照。未設定の場合は従来通りfreeforexapi.comへの直接アクセスを試みますが、動作しない可能性が高いです）。
 </div>
 
 <section>
@@ -292,7 +292,7 @@ freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザ�
 
 </section>
 
-<footer>データ提供: OANDAプラクティス口座API(プロキシURL設定時) / freeforexapi.com（このツール自体は取引の実行は行いません。記録はこのブラウザ内(localStorage)に保存されます）</footer>
+<footer>データ提供: OANDA証券プラクティス口座API(プロキシURL設定時) / freeforexapi.com（このツール自体は取引の実行は行いません。記録はこのブラウザ内(localStorage)に保存されます）</footer>
 
 <script>
 const PAIRS = ['USDJPY','EURJPY','GBPJPY'];

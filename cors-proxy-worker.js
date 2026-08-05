@@ -1,29 +1,33 @@
-// 気配盤(kiseiban.html)用 データ中継Worker(Twelve Data版)
+// 気配盤(kiseiban.html)用 データ中継Worker(OANDA practice API版)
 //
-// freeforexapi.comは実質的にサービスが停止しており(Cloudflare Workerからのサーバー間
-// 通信でも 522 Connection timed out が返る)、代わりにTwelve Data
-// (https://twelvedata.com/)の無料枠(1日800リクエスト・1分8リクエスト)を使ってレート
-// を取得し、index.html側が期待する {rates:{USDJPY:{rate,timestamp}, ...}} 形式に変換
-// して返す。無料枠を超えないよう、Worker側で数分間キャッシュしている。
+// freeforexapi.comは実質的にサービス停止、Twelve Dataは無料枠(800クレジット/日、
+// シンボルごとに1クレジット消費)だと3ペア同時取得で5分に1回程度が限界だった。
+// OANDAの「プラクティス(デモ)口座」は無料で本人確認のみで開設でき、REST APIの
+// レート制限が120リクエスト/秒と非常に緩いため、ほぼリアルタイムに近い頻度で
+// レートを取得できる。取得した価格を index.html側が期待する
+// {rates:{USDJPY:{rate,timestamp}, ...}} 形式に変換して返す。
+//
+// 注意: OANDAのプラクティス口座は仮想資金でのペーパートレード用であり、実際の
+// 資金移動は一切発生しない。ここでは「無料のレートデータ供給源」としてのみ使う。
 //
 // デプロイ手順:
-// 1. https://twelvedata.com/ で無料アカウントを作成し、APIキーを取得する
-// 2. https://dash.cloudflare.com/ → Workers & Pages → 対象のWorkerを開く →
-//    「Settings」タブ →「Variables and Secrets」→「Add」で
-//      種類: Secret
-//      名前: TWELVEDATA_API_KEY
-//      値:   取得したAPIキー
-//    を追加して保存する(公開リポジトリのコードにキーを直接書かないため)
-// 3. このファイルの内容をWorkerのコードエディタに丸ごと貼り付けて「Deploy」
-//
-// 無料枠の消費が気になる場合(Twelve Dataのダッシュボードで使用量を確認できます)は、
-// 下のCACHE_TTL_SECONDSを大きくしてください。3ペアをまとめて取得するため、
-// 1回のアップストリーム呼び出しで複数クレジットを消費する可能性を見込んで
-// デフォルトは保守的に300秒(5分)にしている。
+// 1. https://www.oanda.com/ でプラクティス(デモ)口座を作成する(本人確認あり)
+// 2. ログイン後「My Account」→「My Services」→「Manage API Access」で
+//    Personal Access Tokenを発行する
+// 3. 口座一覧(Account一覧)から accountID(例: 101-009-XXXXXXX-001 のような形式)
+//    を確認する
+// 4. https://dash.cloudflare.com/ → Workers & Pages → 対象のWorkerを開く →
+//    「Settings」タブ →「Variables and Secrets」→「Add」で以下の2つをSecretとして追加:
+//      OANDA_API_TOKEN  = 発行したPersonal Access Token
+//      OANDA_ACCOUNT_ID = 確認したaccountID
+// 5. このファイルの内容をWorkerのコードエディタに丸ごと貼り付けて「Deploy」
 
-const SYMBOLS = 'USD/JPY,EUR/JPY,GBP/JPY';
-const SYMBOL_TO_PAIR = { 'USD/JPY': 'USDJPY', 'EUR/JPY': 'EURJPY', 'GBP/JPY': 'GBPJPY' };
-const CACHE_TTL_SECONDS = 300;
+const INSTRUMENTS = 'USD_JPY,EUR_JPY,GBP_JPY';
+const INSTRUMENT_TO_PAIR = { USD_JPY: 'USDJPY', EUR_JPY: 'EURJPY', GBP_JPY: 'GBPJPY' };
+// OANDAのレート制限(120req/秒)に対して十分な余裕があるが、同時に複数タブを
+// 開いた場合の重複呼び出しを避けるため、ごく短時間だけキャッシュする。
+const CACHE_TTL_SECONDS = 5;
+const OANDA_BASE_URL = 'https://api-fxpractice.oanda.com';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -51,15 +55,17 @@ export default {
       return withCors(await cached.text(), 200);
     }
 
-    if (!env.TWELVEDATA_API_KEY) {
+    if (!env.OANDA_API_TOKEN || !env.OANDA_ACCOUNT_ID) {
       return withCors(JSON.stringify({
-        error: 'TWELVEDATA_API_KEY未設定。WorkerのSettings > Variables and SecretsでSecretを追加してください。',
+        error: 'OANDA_API_TOKENまたはOANDA_ACCOUNT_ID未設定。WorkerのSettings > Variables and SecretsでSecretを追加してください。',
       }), 500);
     }
 
     try {
-      const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(SYMBOLS)}&apikey=${env.TWELVEDATA_API_KEY}`;
-      const upstream = await fetch(url);
+      const url = `${OANDA_BASE_URL}/v3/accounts/${env.OANDA_ACCOUNT_ID}/pricing?instruments=${encodeURIComponent(INSTRUMENTS)}`;
+      const upstream = await fetch(url, {
+        headers: { Authorization: `Bearer ${env.OANDA_API_TOKEN}` },
+      });
       const text = await upstream.text();
 
       let data;
@@ -71,18 +77,25 @@ export default {
         }), 502);
       }
 
+      if (!upstream.ok) {
+        return withCors(JSON.stringify({
+          error: 'oanda_error', status: upstream.status, body: data,
+        }), 502);
+      }
+
       const rates = {};
-      for (const [symbol, pair] of Object.entries(SYMBOL_TO_PAIR)) {
-        const q = data[symbol];
-        if (!q || q.close == null) continue;
-        let ts = Math.floor(Date.now() / 1000);
-        if (q.timestamp) {
-          ts = q.timestamp;
-        } else if (q.datetime) {
-          const parsed = Date.parse(q.datetime);
-          if (!isNaN(parsed)) ts = Math.floor(parsed / 1000);
-        }
-        rates[pair] = { rate: parseFloat(q.close), timestamp: ts };
+      const prices = Array.isArray(data.prices) ? data.prices : [];
+      for (const p of prices) {
+        const pair = INSTRUMENT_TO_PAIR[p.instrument];
+        if (!pair) continue;
+        const bid = p.bids && p.bids[0] && parseFloat(p.bids[0].price);
+        const ask = p.asks && p.asks[0] && parseFloat(p.asks[0].price);
+        if (!bid || !ask) continue;
+        const parsedTime = Date.parse(p.time);
+        rates[pair] = {
+          rate: (bid + ask) / 2,
+          timestamp: isNaN(parsedTime) ? Math.floor(Date.now() / 1000) : Math.floor(parsedTime / 1000),
+        };
       }
 
       if (Object.keys(rates).length === 0) {

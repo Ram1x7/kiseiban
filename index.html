@@ -223,8 +223,14 @@ freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザ�
     <div class="tradingview-widget-container">
       <div id="tvChart"></div>
     </div>
+    <div id="manualCheckPrompt" class="signal" style="display:none; margin-top:12px;">
+      <span class="tag high">⏰ 確認タイミング</span>
+      <span class="why" id="manualCheckText" style="flex:1;"></span>
+      <button class="btn-reset" id="manualCheckDismiss">閉じる</button>
+    </div>
+    <div id="h4CountdownTv" style="font-family:var(--mono); font-size:13px; color:var(--paper-dim); margin-top:10px;"></div>
     <div class="breakeven-note">
-      TradingView提供のリアルタイムに近いチャートです。あくまで目視で参考にするためのもので、ここから下の気配盤自体の指標(SMA/RSI/H4×M15判定など)には反映されません。それらは引き続き「データ取得プロキシURL」で設定したデータソースを使用します。
+      TradingView提供のリアルタイムに近いチャートです。あくまで目視で参考にするためのもので、ここから下の気配盤自体の指標(SMA/RSI/H4×M15判定など)には反映されません。それらは引き続き「データ取得プロキシURL」で設定したデータソースを使用します。M15足が切り替わるたびに、下の指標が使えるかどうかに関わらず、このチャートでH4の重要ライン付近のブレイク→押し目/戻り→ピンバーを目視で確認するタイミングをお知らせします(通知はオプトイン、「H4×M15手法」カードのチェックボックスで設定できます)。
     </div>
   </div>
 
@@ -334,7 +340,7 @@ function initTradingViewWidget(){
     container_id: 'tvChart',
   });
 }
-const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false, lastH4Key:{USDJPY:null,EURJPY:null,GBPJPY:null}, lastSuccessAt:null, bgGapNoticeTimer:null };
+const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false, lastH4Key:{USDJPY:null,EURJPY:null,GBPJPY:null}, lastSuccessAt:null, bgGapNoticeTimer:null, lastM15Boundary:null, manualCheckTimer:null };
 let priceChart, rsiChart, winrateChart;
 
 function fmt(n, d=2){ return Number(n).toLocaleString('ja-JP',{minimumFractionDigits:d, maximumFractionDigits:d}); }
@@ -715,17 +721,56 @@ function renderH4M15(r){
 }
 
 // --- Entry timing: countdown to the next M15 candle, and an opt-in alert (sound +
-// browser notification) fired once when a symbol's H4×M15 status newly becomes 'signal' ---
+// browser notification) fired once when a symbol's H4×M15 status newly becomes 'signal'.
+// The countdown itself is clock-based (no price data needed), so it keeps working even
+// when the data feed is down — that's also used to prompt a manual TradingView check at
+// each M15 boundary, independent of whether our own analysis pipeline has usable data. ---
 function updateH4Countdown(){
-  const el = document.getElementById('h4Countdown');
-  if(!el) return;
   const bucketMs = 15*60000;
   const now = Date.now();
-  const next = Math.ceil(now/bucketMs)*bucketMs;
+  const currentBoundary = Math.floor(now/bucketMs)*bucketMs;
+  const next = currentBoundary + bucketMs;
   const remain = Math.max(0, next-now);
   const mm = String(Math.floor(remain/60000)).padStart(2,'0');
   const ss = String(Math.floor((remain%60000)/1000)).padStart(2,'0');
-  el.textContent = `次のM15足の始まりまで ${mm}:${ss}`;
+  const text = `次のM15足の始まりまで ${mm}:${ss}`;
+  ['h4Countdown','h4CountdownTv'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = text;
+  });
+
+  if(state.lastM15Boundary !== null && currentBoundary !== state.lastM15Boundary){
+    onNewM15Candle();
+  }
+  state.lastM15Boundary = currentBoundary;
+}
+
+function onNewM15Candle(){
+  showManualCheckPrompt();
+  const toggle = document.getElementById('alertToggle');
+  if(toggle && toggle.checked){
+    playBeep();
+    notifyManualCheck();
+  }
+}
+
+function showManualCheckPrompt(){
+  const el = document.getElementById('manualCheckPrompt');
+  const text = document.getElementById('manualCheckText');
+  if(!el || !text) return;
+  text.textContent = `新しいM15足が始まりました。上のTradingViewチャートで、H4の重要ライン付近のブレイク→押し目/戻り→ピンバーが出ていないか目視で確認してください(参考情報。エントリーを推奨するものではありません)。`;
+  el.style.display = 'flex';
+  if(state.manualCheckTimer) clearTimeout(state.manualCheckTimer);
+  state.manualCheckTimer = setTimeout(()=>{ el.style.display = 'none'; }, 3*60000);
+}
+
+function notifyManualCheck(){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  try{
+    new Notification('気配盤 — 確認タイミング', {
+      body: '新しいM15足が始まりました。TradingViewでH4水準付近のピンバーを目視確認してください(参考情報)。',
+    });
+  }catch(e){ /* best effort */ }
 }
 
 function playBeep(){
@@ -788,6 +833,11 @@ document.getElementById('alertToggle').addEventListener('change', (e)=>{
   if(e.target.checked && 'Notification' in window && Notification.permission==='default'){
     Notification.requestPermission();
   }
+});
+
+document.getElementById('manualCheckDismiss').addEventListener('click', ()=>{
+  document.getElementById('manualCheckPrompt').style.display = 'none';
+  if(state.manualCheckTimer) clearTimeout(state.manualCheckTimer);
 });
 
 setInterval(updateH4Countdown, 1000);

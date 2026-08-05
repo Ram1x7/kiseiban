@@ -222,6 +222,7 @@ freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザ�
       <span id="priceChg" style="font-family:var(--mono); font-size:13px;"></span>
     </div>
     <div id="chartLoading" class="loading">読み込み中…</div>
+    <div id="bgGapNotice" class="loading" style="display:none; color:var(--brass);"></div>
     <canvas id="priceChart" height="180"></canvas>
   </div>
 
@@ -295,7 +296,7 @@ freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザ�
 
 <script>
 const PAIRS = ['USDJPY','EURJPY','GBPJPY'];
-const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false, lastH4Key:{USDJPY:null,EURJPY:null,GBPJPY:null} };
+const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false, lastH4Key:{USDJPY:null,EURJPY:null,GBPJPY:null}, lastSuccessAt:null, bgGapNoticeTimer:null };
 let priceChart, rsiChart, winrateChart;
 
 function fmt(n, d=2){ return Number(n).toLocaleString('ja-JP',{minimumFractionDigits:d, maximumFractionDigits:d}); }
@@ -447,6 +448,7 @@ async function poll(){
       }
     });
     state.pollFailCount = 0;
+    state.lastSuccessAt = now;
     if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer=null; }
     document.getElementById('chartLoading').classList.remove('error');
     render();
@@ -789,6 +791,28 @@ async function startFeed(){
   poll();
   state.pollTimer = setInterval(poll, 20000);
 }
+
+// Mobile browsers (notably iOS Safari) throttle or fully suspend setInterval/setTimeout
+// timers while the tab is backgrounded or the screen is locked, so polling silently stops
+// and gaps appear in the recorded candles. We can't prevent that, but we can catch up
+// immediately on return and be honest about the gap instead of pretending it didn't happen.
+function showBgGapNotice(gapMs){
+  const el = document.getElementById('bgGapNotice');
+  if(!el) return;
+  const minutes = Math.max(1, Math.round(gapMs/60000));
+  el.textContent = `バックグラウンドから復帰しました。この間(約${minutes}分)のレートは記録されていません(ブラウザがバックグラウンドではタイマーの実行を止めるため)。`;
+  el.style.display = 'block';
+  if(state.bgGapNoticeTimer) clearTimeout(state.bgGapNoticeTimer);
+  state.bgGapNoticeTimer = setTimeout(()=>{ el.style.display = 'none'; }, 15000);
+}
+
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState !== 'visible') return;
+  const gapMs = state.lastSuccessAt ? Date.now() - state.lastSuccessAt : 0;
+  if(gapMs > 90000) showBgGapNotice(gapMs);
+  if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer = null; }
+  poll();
+});
 
 function labelize(times){
   return times.map(t => t.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));

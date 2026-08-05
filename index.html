@@ -210,7 +210,7 @@
   <label>データ取得プロキシURL(CORS対策・任意)<input type="text" id="proxyUrlInput" placeholder="https://xxxx.workers.dev" style="width:260px;"></label>
 </div>
 <div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
-  freeforexapi.comはブラウザからの直接アクセス(CORS)に対応していないため、GitHub Pages上ではレート取得に失敗し続けることがあります。回避するには、リポジトリ同梱の<code>cors-proxy-worker.js</code>をCloudflare Workers等にデプロイし、発行されたURLを上の欄に貼り付けてください（未設定の場合は従来通りfreeforexapi.comに直接アクセスします）。
+freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザからの直接アクセス(CORS)にも対応していないため、GitHub Pages上ではレート取得に失敗し続けます。リポジトリ同梱の<code>cors-proxy-worker.js</code>(Twelve Data経由でレートを取得する版)をCloudflare Workersにデプロイし、発行されたURLを上の欄に貼り付けてください（Twelve Dataの無料APIキーが別途必要です。詳しくはファイル冒頭のコメントを参照。未設定の場合は従来通りfreeforexapi.comへの直接アクセスを試みますが、動作しない可能性が高いです）。
 </div>
 
 <section>
@@ -291,7 +291,7 @@
 
 </section>
 
-<footer>データ提供: freeforexapi.com（このツール自体は取引の実行は行いません。記録はこのブラウザ内(localStorage)に保存されます）</footer>
+<footer>データ提供: Twelve Data(プロキシURL設定時) / freeforexapi.com（このツール自体は取引の実行は行いません。記録はこのブラウザ内(localStorage)に保存されます）</footer>
 
 <script>
 const PAIRS = ['USDJPY','EURJPY','GBPJPY'];

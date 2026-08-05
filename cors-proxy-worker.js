@@ -1,26 +1,27 @@
-// 気配盤(kiseiban.html)用 データ中継Worker(OANDA practice API版)
+// 気配盤(kiseiban.html)用 データ中継Worker(OANDA Japan v1 API版)
 //
 // freeforexapi.comは実質的にサービス停止、Twelve Dataは無料枠(800クレジット/日、
 // シンボルごとに1クレジット消費)だと3ペア同時取得で5分に1回程度が限界だった。
-// OANDAの「プラクティス(デモ)口座」は無料で本人確認のみで開設でき、REST APIの
-// レート制限が120リクエスト/秒と非常に緩いため、ほぼリアルタイムに近い頻度で
-// レートを取得できる。取得した価格を index.html側が期待する
-// {rates:{USDJPY:{rate,timestamp}, ...}} 形式に変換して返す。
+// OANDA証券(oanda.jp)のプラクティス(デモ)口座なら無料でREST APIが使え、
+// レート取得(/v1/prices)にはaccountIdも不要でトークンだけで叩ける。
 //
-// 注意: OANDAのプラクティス口座は仮想資金でのペーパートレード用であり、実際の
-// 資金移動は一切発生しない。ここでは「無料のレートデータ供給源」としてのみ使う。
+// 注意:
+// - OANDA Japanは国際版OANDAとは別の、旧世代の「v1 API」を使用している
+//   (https://developer.oanda.com/docs/jp/v1/ 参照。国際版のv20 APIとは
+//   エンドポイント・レスポンス形式が異なるので注意)
+// - プラクティス口座は仮想資金でのペーパートレード用であり、実際の資金移動は
+//   一切発生しない。ここでは「無料のレートデータ供給源」としてのみ使う
+// - OANDA Japanのデモ口座には利用期限(登録から約30日、規約により変動あり)が
+//   あるため、期限が来たら口座を作り直し、Workerのシークレットを更新する必要がある
 //
 // デプロイ手順:
-// 1. https://www.oanda.com/ でプラクティス(デモ)口座を作成する(本人確認あり)
-// 2. ログイン後「My Account」→「My Services」→「Manage API Access」で
-//    Personal Access Tokenを発行する
-// 3. 口座一覧(Account一覧)から accountID(例: 101-009-XXXXXXX-001 のような形式)
-//    を確認する
-// 4. https://dash.cloudflare.com/ → Workers & Pages → 対象のWorkerを開く →
-//    「Settings」タブ →「Variables and Secrets」→「Add」で以下の2つをSecretとして追加:
-//      OANDA_API_TOKEN  = 発行したPersonal Access Token
-//      OANDA_ACCOUNT_ID = 確認したaccountID
-// 5. このファイルの内容をWorkerのコードエディタに丸ごと貼り付けて「Deploy」
+// 1. https://www.oanda.jp/ でプラクティス(デモ)口座を作成する(本人確認あり)
+// 2. マイページにログイン後、左メニューの「口座管理」→「APIアクセスの管理」で
+//    「REST APIトークンを発行する」をクリックしてトークンを発行する
+// 3. https://dash.cloudflare.com/ → Workers & Pages → 対象のWorkerを開く →
+//    「Settings」タブ →「Variables and Secrets」→「Add」で以下をSecretとして追加:
+//      OANDA_API_TOKEN = 発行したAPIトークン
+// 4. このファイルの内容をWorkerのコードエディタに丸ごと貼り付けて「Deploy」
 
 const INSTRUMENTS = 'USD_JPY,EUR_JPY,GBP_JPY';
 const INSTRUMENT_TO_PAIR = { USD_JPY: 'USDJPY', EUR_JPY: 'EURJPY', GBP_JPY: 'GBPJPY' };
@@ -55,14 +56,14 @@ export default {
       return withCors(await cached.text(), 200);
     }
 
-    if (!env.OANDA_API_TOKEN || !env.OANDA_ACCOUNT_ID) {
+    if (!env.OANDA_API_TOKEN) {
       return withCors(JSON.stringify({
-        error: 'OANDA_API_TOKENまたはOANDA_ACCOUNT_ID未設定。WorkerのSettings > Variables and SecretsでSecretを追加してください。',
+        error: 'OANDA_API_TOKEN未設定。WorkerのSettings > Variables and SecretsでSecretを追加してください。',
       }), 500);
     }
 
     try {
-      const url = `${OANDA_BASE_URL}/v3/accounts/${env.OANDA_ACCOUNT_ID}/pricing?instruments=${encodeURIComponent(INSTRUMENTS)}`;
+      const url = `${OANDA_BASE_URL}/v1/prices?instruments=${encodeURIComponent(INSTRUMENTS)}`;
       const upstream = await fetch(url, {
         headers: { Authorization: `Bearer ${env.OANDA_API_TOKEN}` },
       });
@@ -88,12 +89,10 @@ export default {
       for (const p of prices) {
         const pair = INSTRUMENT_TO_PAIR[p.instrument];
         if (!pair) continue;
-        const bid = p.bids && p.bids[0] && parseFloat(p.bids[0].price);
-        const ask = p.asks && p.asks[0] && parseFloat(p.asks[0].price);
-        if (!bid || !ask) continue;
+        if (typeof p.bid !== 'number' || typeof p.ask !== 'number') continue;
         const parsedTime = Date.parse(p.time);
         rates[pair] = {
-          rate: (bid + ask) / 2,
+          rate: (p.bid + p.ask) / 2,
           timestamp: isNaN(parsedTime) ? Math.floor(Date.now() / 1000) : Math.floor(parsedTime / 1000),
         };
       }

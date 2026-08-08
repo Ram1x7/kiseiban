@@ -571,8 +571,12 @@ async function liveTick(){
     renderAll();
   }catch(err){
     console.error('Gravia live data error:', err);
-    const el = document.getElementById('logBody');
-    if(el) el.insertAdjacentHTML('beforeend', `<div class="logline" style="color:#ff2e88">LIVE DATA ERROR: ${err.message}</div>`);
+    // Pushed into state.logs (rather than writing directly to the DOM) so
+    // this entry survives the next renderLogs() cycle instead of being
+    // wiped out by it — see renderLogs()/atLog() for the same fix.
+    state.logs.push({ t: new Date().toTimeString().slice(0,8), tag:'ERR', msg:`LIVE DATA ERROR: ${err.message}`, price:null, pnl:null });
+    if(state.logs.length > 60) state.logs.shift();
+    renderLogs();
   }
 }
 
@@ -595,7 +599,11 @@ const atState = {
   lastSignalText: '—',
   lastProcessed: {},
   polling: false,
+  lastStatusLogAt: 0,
 };
+// シグナル未検出でも「動いていることが分かる」よう、この間隔で現在値と
+// EMAの位置関係を実行ログへ一言出す(スパム防止のため間引く)。
+const STATUS_LOG_INTERVAL_MS = 5*60*1000;
 
 function emaSeries(values, period){
   const out = new Array(values.length).fill(null);
@@ -689,12 +697,13 @@ async function placeOrder(direction, tp, sl){
 }
 
 function atLog(tag, msg){
-  const el = document.getElementById('logBody');
+  // Pushed into the same state.logs buffer that renderLogs() renders from
+  // (rather than writing directly to the DOM), so this entry survives the
+  // next renderAll()/renderLogs() cycle instead of being wiped out by it.
   const t = new Date().toTimeString().slice(0,8);
-  if(el){
-    el.insertAdjacentHTML('beforeend', `<div class="logline"><span class="t">${t}</span><span class="tag ${tag}">${tag}</span><span class="msg">${msg}</span></div>`);
-    el.scrollTop = el.scrollHeight;
-  }
+  state.logs.push({t, tag, msg, price:null, pnl:null});
+  if(state.logs.length > 60) state.logs.shift();
+  renderLogs();
   console.log(`[AUTOTRADE ${tag}]`, msg);
 }
 
@@ -740,6 +749,16 @@ async function autotradeTick(){
     const signal = detectSignal(candles, 10, 'A') || detectSignal(candles, 20, 'B');
     if(!signal){
       atState.lastSignalText = `様子見 (${new Date().toTimeString().slice(0,8)})`;
+      const now = Date.now();
+      if(now - atState.lastStatusLogAt >= STATUS_LOG_INTERVAL_MS){
+        atState.lastStatusLogAt = now;
+        const closes = candles.map(c=>c.close);
+        const lastClose = closes[closes.length-1];
+        const ema10 = emaSeries(closes, 10).at(-1);
+        const ema20 = emaSeries(closes, 20).at(-1);
+        const rel = (e)=> e==null ? '—' : (lastClose>=e ? '上' : '下');
+        atLog('SIG', `様子見: ${AT.SYMBOL} 現在値${fmt(lastClose,3)} / EMA10 ${fmt(ema10,3)}(${rel(ema10)}) / EMA20 ${fmt(ema20,3)}(${rel(ema20)})`);
+      }
       updateAutotradeUI();
       return;
     }
@@ -987,7 +1006,9 @@ function drawVolBars(id, data, color){
 function renderLogs(){
   const el = document.getElementById('logBody');
   el.innerHTML = state.logs.slice(-40).map(l=>{
-    return `<div class="logline"><span class="t">${l.t}</span><span class="tag ${l.tag}">${l.tag}</span><span class="msg">${l.msg}</span> <span class="px">$${fmt(l.price,2)}</span> <span style="color:${l.pnl>=0?'#28ffb0':'#ff2e88'}">${l.pnl>=0?'+':''}${fmt(l.pnl,2)}</span></div>`;
+    const priceHtml = l.price!=null ? ` <span class="px">$${fmt(l.price,2)}</span>` : '';
+    const pnlHtml = l.pnl!=null ? ` <span style="color:${l.pnl>=0?'#28ffb0':'#ff2e88'}">${l.pnl>=0?'+':''}${fmt(l.pnl,2)}</span>` : '';
+    return `<div class="logline"><span class="t">${l.t}</span><span class="tag ${l.tag}">${l.tag}</span><span class="msg">${l.msg}</span>${priceHtml}${pnlHtml}</div>`;
   }).join('');
   el.scrollTop = el.scrollHeight;
 }

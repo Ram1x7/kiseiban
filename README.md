@@ -5,6 +5,17 @@
 ## ファイル
 
 - `index.html` — ダッシュボード本体。これをブラウザで開くだけで動きます。GitHub Pagesにそのまま置いてもOK。
+- `config.js` — MetaApiのトークン・口座IDを書く設定ファイル。**`.gitignore`で除外されておりコミットされません**。最初は存在しないので、`config.example.js`をコピーして作成してください。
+- `config.example.js` — `config.js`のテンプレート(値は空欄でコミットされています)。
+
+## ⚠️ このリポジトリはpublicです(重要)
+
+このリポジトリはGitHub上でpublic(誰でも閲覧可能)に設定されています。MetaApiのAPIトークンは口座に接続できてしまう認証情報なので、**`index.html`や他のコミットされるファイルに直接書き込んで`git push`しないでください**。誰でもコードを見てトークンを盗める状態になります。
+
+そのため設定は`config.js`という別ファイルに分離し、`.gitignore`でGitの管理対象から外しています。この結果として:
+
+- **GitHub Pages上のダッシュボードは、`config.js`が存在しないため常にシミュレーションモードで動作します**(これは意図した安全な挙動です)
+- 本物のMT5データを見るには、後述の通り**自分のローカル環境(またはトークンが外部に漏れない自分専用のホスティング先)で`config.js`を用意して開く**必要があります
 
 ## 1. MetaApi.cloud に登録する(ブラウザだけでOK)
 
@@ -13,9 +24,13 @@
 3. https://app.metaapi.cloud/accounts で「Add account」→ MT5のログインID・パスワード・サーバー名(ブローカーから発行されているもの)を入力して接続
 4. 接続が完了すると **Account ID**(例: `865d3a4d-3803-486d-bdf3-a85679d9fad2`)が表示されるのでコピー
 
-## 2. index.html に設定を入れる
+## 2. config.js に設定を入れる(ローカルのみ・Gitにはコミットしない)
 
-`index.html` を開き、`<script>`内の上の方にある `CONFIG` を書き換えます。
+`config.example.js` をコピーして `config.js` を作成し、中身を書き換えます。
+
+```
+cp config.example.js config.js
+```
 
 ```js
 const CONFIG = {
@@ -27,7 +42,7 @@ const CONFIG = {
 };
 ```
 
-保存してブラウザをリロードすれば、口座残高・約定履歴・ポジションが本物のデータで表示されます。iPadのテキストエディタアプリ(Textastic、Working Copy など)やSafari上のGitHub編集画面から直接書き換えられます。
+保存してブラウザで`index.html`をリロードすれば、口座残高・約定履歴・ポジションが本物のデータで表示されます。`config.js`は`.gitignore`で除外されているため、**このファイルは`git push`されず、GitHub Pages上には反映されません**(意図した動作です)。iPadでローカルに試したい場合は、Textastic・Working Copyなどのアプリでリポジトリをクローンし、アプリ内で`config.js`を作成・編集してください(GitHub上のWeb編集画面で直接書き換えて`git push`することは、トークンが公開されてしまうため絶対に行わないでください)。
 
 ## 各パネルとデータの対応
 

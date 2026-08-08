@@ -3,1202 +3,776 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>気配盤 — 参考指標と記録帳</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script src="https://s3.tradingview.com/tv.js"></script>
+<title>GRAVIA · LIVE TRADING DASHBOARD</title>
 <style>
   :root{
-    --ink:#0e1a1c;
-    --panel:#132427;
-    --panel-2:#182e31;
-    --hair:#25454a;
-    --brass:#c9a227;
-    --brass-dim:#8a7020;
-    --paper:#e9e3d3;
-    --paper-dim:#a79f8a;
-    --up:#4fae7a;
-    --down:#c0546a;
-    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-    --sans: 'Inter', -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    --bg:#07080c;
+    --panel:#0b0d13;
+    --line:#1c2030;
+    --pink:#ff2e88;
+    --pink-dim:#ff2e8855;
+    --green:#28ffb0;
+    --green-dim:#28ffb055;
+    --amber:#ffcc55;
+    --txt:#d7dbe6;
+    --txt-dim:#7d8296;
+    --mono: 'JetBrains Mono','Space Mono','Courier New',monospace;
   }
-  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
-
-  *{box-sizing:border-box;}
-  body{
-    margin:0;
-    background:var(--ink);
-    color:var(--paper);
-    font-family:var(--sans);
-    padding-bottom:40px;
-  }
-  .banner{
-    position:sticky; top:0; z-index:50;
-    background:linear-gradient(180deg,#3a1418,#2a0f12);
-    border-bottom:1px solid #5a2028;
-    color:#f2d9dc;
-    padding:10px 16px;
-    font-size:12.5px;
-    line-height:1.5;
-    display:flex; gap:10px; align-items:flex-start;
-  }
-  .banner b{color:#ffb3bd;}
-  .banner .mark{font-size:15px; flex-shrink:0;}
-
-  header.top{
-    padding:22px 18px 10px;
-    border-bottom:1px solid var(--hair);
-  }
-  .eyebrow{
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    background:var(--bg);
+    color:var(--txt);
     font-family:var(--mono);
-    font-size:11px;
-    letter-spacing:.14em;
-    color:var(--brass);
-    text-transform:uppercase;
-  }
-  h1{
-    margin:6px 0 4px;
-    font-size:26px;
-    font-weight:700;
-    letter-spacing:-0.01em;
-  }
-  .sub{color:var(--paper-dim); font-size:13px; margin:0;}
-
-  .controls{
-    display:flex; gap:8px; flex-wrap:wrap;
-    padding:14px 18px;
-  }
-  select, button.pill{
-    background:var(--panel-2);
-    border:1px solid var(--hair);
-    color:var(--paper);
-    font-family:var(--mono);
-    font-size:13px;
-    padding:8px 12px;
-    border-radius:6px;
-  }
-  button.pill{cursor:pointer;}
-  button.pill.active{
-    border-color:var(--brass);
-    color:var(--brass);
-  }
-
-  section{padding:10px 18px 22px;}
-  .card{
-    background:var(--panel);
-    border:1px solid var(--hair);
-    border-radius:10px;
-    padding:16px;
-    margin-bottom:14px;
-  }
-  .card h2{
     font-size:12px;
-    text-transform:uppercase;
-    letter-spacing:.1em;
-    color:var(--paper-dim);
-    margin:0 0 12px;
-    font-family:var(--mono);
-    display:flex; justify-content:space-between; align-items:center;
+    width:100%; height:100%;
+    overflow-x:hidden;
   }
-  .price-row{
-    display:flex; align-items:baseline; gap:10px; margin-bottom:10px;
-  }
-  .price{font-family:var(--mono); font-size:28px; font-weight:600;}
-  .price.up{color:var(--up);}
-  .price.down{color:var(--down);}
-  canvas{max-width:100%;}
-  .tradingview-widget-container{width:100%; height:420px;}
-  .tradingview-widget-container #tvChart{width:100%; height:100%;}
-
-  .signal{
-    display:flex; align-items:center; gap:14px;
+  body{
+    background-image:
+      radial-gradient(circle at 15% 10%, #ff2e881a, transparent 40%),
+      radial-gradient(circle at 85% 15%, #28ffb01a, transparent 40%);
     padding:14px;
-    border-radius:8px;
-    background:var(--panel-2);
-    border:1px solid var(--hair);
   }
-  .signal .tag{
-    font-family:var(--mono);
-    font-size:15px;
-    font-weight:600;
-    padding:6px 14px;
-    border-radius:5px;
-    letter-spacing:.04em;
-  }
-  .tag.high{background:rgba(79,174,122,.15); color:var(--up); border:1px solid var(--up);}
-  .tag.low{background:rgba(192,84,106,.15); color:var(--down); border:1px solid var(--down);}
-  .tag.wait{background:rgba(201,162,39,.12); color:var(--brass); border:1px solid var(--brass-dim);}
-  .signal .why{font-size:12.5px; color:var(--paper-dim); line-height:1.5;}
+  .glow-pink{ box-shadow: 0 0 0 1px var(--pink-dim), 0 0 24px -8px var(--pink-dim) inset; }
+  .glow-green{ box-shadow: 0 0 0 1px var(--green-dim), 0 0 24px -8px var(--green-dim) inset; }
 
-  .stat-grid{
-    display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
-    margin-top:10px;
+  /* ---------- HEADER ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    border:1px solid var(--line); border-radius:6px;
+    background:var(--panel);
+    padding:8px 14px;
+    margin-bottom:10px;
   }
-  .stat{
-    background:var(--panel-2);
-    border:1px solid var(--hair);
-    border-radius:8px;
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand .logo{
+    width:22px; height:22px; border-radius:5px;
+    background:linear-gradient(135deg,var(--pink),#7a1cff);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; color:#fff; font-size:12px;
+  }
+  .brand .name{ font-weight:700; letter-spacing:1px; color:#fff; }
+  .brand .sub{ color:var(--txt-dim); font-size:10px; letter-spacing:1px; }
+  .hstats{ display:flex; gap:22px; align-items:baseline; }
+  .hstats .item{ text-align:right; }
+  .hstats .label{ color:var(--txt-dim); font-size:9px; letter-spacing:1px; display:block; }
+  .hstats .val{ font-size:13px; font-weight:700; color:#fff; }
+  .hstats .val.pink{ color:var(--pink); }
+  .hstats .val.green{ color:var(--green); }
+  .live-dot{
+    width:6px; height:6px; border-radius:50%; background:var(--green);
+    display:inline-block; margin-right:5px;
+    box-shadow:0 0 6px var(--green);
+    animation:pulse 1.4s infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+
+  /* ---------- GRID ---------- */
+  .grid-row1{ display:grid; grid-template-columns: 1.1fr 1.6fr 1.3fr; gap:10px; margin-bottom:10px; }
+  .panel{
+    border:1px solid var(--line); border-radius:6px;
+    background:var(--panel);
     padding:10px 12px;
+    position:relative;
+    overflow:hidden;
   }
-  .stat .k{font-size:11px; color:var(--paper-dim); font-family:var(--mono);}
-  .stat .v{font-family:var(--mono); font-size:18px; margin-top:2px;}
+  .panel-title{
+    display:flex; align-items:center; justify-content:space-between;
+    color:var(--txt-dim); font-size:9px; letter-spacing:1.5px; text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .badge{
+    font-size:9px; padding:2px 6px; border-radius:3px; letter-spacing:1px;
+    background:var(--green-dim); color:var(--green); border:1px solid var(--green);
+  }
 
-  .journal-input{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
-  .journal-input input[type=number]{
-    background:var(--panel-2); border:1px solid var(--hair); color:var(--paper);
-    font-family:var(--mono); padding:8px 10px; border-radius:6px; width:110px;
-  }
-  .btn-win, .btn-loss, .btn-reset{
-    font-family:var(--mono); font-size:13px; padding:8px 14px; border-radius:6px; cursor:pointer; border:1px solid;
-  }
-  .btn-win{background:rgba(79,174,122,.12); color:var(--up); border-color:var(--up);}
-  .btn-loss{background:rgba(192,84,106,.12); color:var(--down); border-color:var(--down);}
-  .btn-reset{background:transparent; color:var(--paper-dim); border-color:var(--hair); margin-left:auto;}
+  /* Equity Card */
+  .equity-id{ font-size:11px; color:#fff; font-weight:700; }
+  .equity-val{ font-size:32px; font-weight:800; color:#fff; margin:4px 0 2px; }
+  .equity-delta{ font-size:11px; margin-bottom:8px; }
+  .equity-delta.up{ color:var(--green); }
+  .equity-foot{ display:flex; gap:16px; margin-top:8px; }
+  .equity-foot .k{ color:var(--txt-dim); font-size:9px; display:block; }
+  .equity-foot .v{ font-size:13px; font-weight:700; color:#fff; }
+  canvas.spark{ width:100%; height:34px; margin-top:6px; }
 
-  .breakeven-note{
-    font-size:12px; color:var(--paper-dim); margin-top:10px; line-height:1.6;
-    border-top:1px dashed var(--hair); padding-top:10px;
-  }
-  .breakeven-note b{color:var(--brass);}
+  /* Candle panel */
+  .price-now{ font-size:18px; font-weight:800; color:#fff; }
+  .price-tag{ color:var(--txt-dim); font-size:9px; }
+  canvas#candles{ width:100%; height:120px; display:block; }
+  .book{ position:absolute; right:10px; top:34px; font-size:9px; color:var(--txt-dim); text-align:right; line-height:1.5; }
+  .book b{ color:#fff; }
 
-  table.hist{width:100%; border-collapse:collapse; margin-top:10px; font-family:var(--mono); font-size:12px;}
-  table.hist th, table.hist td{padding:6px 8px; text-align:left; border-bottom:1px solid var(--hair); color:var(--paper-dim);}
-  table.hist td.win{color:var(--up);}
-  table.hist td.loss{color:var(--down);}
+  /* Streak panel */
+  .streak-row{ display:flex; align-items:center; gap:10px; }
+  .streak-x{ color:var(--pink); font-weight:800; font-size:20px; }
+  .streak-n{ color:var(--green); font-weight:800; font-size:20px; }
+  canvas#streakbar{ width:100%; height:44px; margin-top:8px; }
+  .streak-foot{ display:flex; justify-content:space-between; margin-top:6px; color:var(--txt-dim); font-size:9px; }
+  .streak-foot b{ color:#fff; font-size:11px; display:block; }
 
-  .empty{color:var(--paper-dim); font-size:13px; padding:20px 0; text-align:center;}
-  .loading{color:var(--paper-dim); font-size:13px; padding:12px 0;}
-  .loading.error{color:var(--down);}
-  .cfg-row{display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:12px; font-size:12px; color:var(--paper-dim);}
-  .cfg-row input[type=number]{
-    background:var(--panel-2); border:1px solid var(--hair); color:var(--paper);
-    font-family:var(--mono); padding:6px 8px; border-radius:6px; width:64px; margin-left:6px;
+  /* MicroFish */
+  .microfish-wrap{ margin-bottom:10px; }
+  .mf-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
+  .legend{ display:flex; gap:12px; position:absolute; left:12px; top:30px; font-size:9px; color:var(--txt-dim); z-index:2; }
+  .legend span{ display:flex; align-items:center; gap:4px; margin-bottom:5px; }
+  .dot{ width:6px; height:6px; border-radius:50%; display:inline-block; }
+  canvas#microfish{ width:100%; height:230px; display:block; }
+  .mf-stats{ position:absolute; right:12px; top:30px; text-align:right; font-size:9px; color:var(--txt-dim); z-index:2; }
+  .mf-stats b{ color:#fff; font-size:11px; }
+
+  /* Row 3 */
+  .grid-row3{ display:grid; grid-template-columns: 1.2fr 1.3fr 1fr; gap:10px; margin-bottom:10px; }
+  canvas#equitycurve{ width:100%; height:150px; display:block; }
+  .curve-total{ position:absolute; left:12px; top:28px; font-size:9px; color:var(--txt-dim); }
+  .curve-total b{ color:var(--green); font-size:13px; display:block;}
+
+  table.trades{ width:100%; border-collapse:collapse; font-size:10px; }
+  table.trades th{ text-align:right; color:var(--txt-dim); font-weight:400; padding:3px 4px; font-size:9px; }
+  table.trades th:first-child, table.trades td:first-child{ text-align:left; }
+  table.trades td{ text-align:right; padding:3px 4px; color:#fff; border-top:1px solid var(--line); }
+  table.trades td.up{ color:var(--green); }
+  table.trades td.dn{ color:var(--pink); }
+
+  .vol-charts canvas{ width:100%; height:60px; display:block; margin-bottom:6px; }
+  .vol-label{ display:flex; justify-content:space-between; font-size:9px; color:var(--txt-dim); }
+
+  /* Execution log */
+  .logpanel{ height:150px; display:flex; flex-direction:column; }
+  .logbody{ flex:1; overflow-y:auto; font-size:10px; line-height:1.7; }
+  .logbody::-webkit-scrollbar{ width:4px; }
+  .logbody::-webkit-scrollbar-thumb{ background:var(--line); }
+  .logline{ white-space:nowrap; color:var(--txt-dim); }
+  .logline .t{ color:#4d5266; margin-right:8px; }
+  .logline .tag{ display:inline-block; width:34px; font-weight:700; }
+  .tag.WIN{ color:var(--green); }
+  .tag.IN{ color:var(--amber); }
+  .tag.TICK{ color:#7a8bff; }
+  .logline .msg{ color:var(--txt); }
+  .logline .px{ color:#fff; }
+
+  .footer-note{
+    margin-top:10px; text-align:center; color:var(--txt-dim); font-size:9px; letter-spacing:1px;
   }
-  .cfg-row input[type=text]{
-    background:var(--panel-2); border:1px solid var(--hair); color:var(--paper);
-    font-family:var(--mono); padding:6px 8px; border-radius:6px; margin-left:6px;
-  }
-  footer{padding:20px 18px 0; color:var(--paper-dim); font-size:11px; text-align:center;}
 </style>
 </head>
 <body>
 
-<div class="banner">
-  <span class="mark">⚠</span>
-  <div><b>参考情報であり、勝敗を保証するものではありません。</b>短期取引は証拠金を失うリスクがあります。表示される指標は「値動きの傾向」を示すのみで、次の値動きを予測するものではありません。</div>
-</div>
-
-<header class="top">
-  <div class="eyebrow">Reference dashboard / not financial advice</div>
-  <h1>気配盤 — USD/JPY</h1>
-  <p class="sub">価格・指標の参考表示と、勝率を自分の目で確認するための記録帳</p>
+<header>
+  <div class="brand">
+    <div class="logo">G</div>
+    <div>
+      <div class="name">GRAVIA <span style="color:var(--txt-dim); font-weight:400;">· BTC/POLYMARKET</span></div>
+      <div class="sub"><span class="live-dot"></span>LIVE · SIMULATED</div>
+    </div>
+  </div>
+  <div class="hstats">
+    <div class="item"><span class="label">PRICE</span><span class="val" id="hPrice">$0.00</span></div>
+    <div class="item"><span class="label">PNL</span><span class="val green" id="hPnl">$0.00</span></div>
+    <div class="item"><span class="label">TRADES</span><span class="val" id="hTrades">0/0</span></div>
+    <div class="item"><span class="label">WIN RATE</span><span class="val pink" id="hWin">0.0%</span></div>
+    <div class="item"><span class="label">TIME</span><span class="val" id="hTime">00:00:00</span></div>
+  </div>
 </header>
 
-<div class="controls">
-  <select id="symbolSel">
-    <option value="USDJPY">USD/JPY</option>
-    <option value="EURJPY">EUR/JPY</option>
-    <option value="GBPJPY">GBP/JPY</option>
-  </select>
-  <button class="pill" data-interval="5">5分足</button>
-  <button class="pill" data-interval="15">15分足</button>
-  <button class="pill active" data-interval="30">30分足</button>
-  <button class="pill" data-interval="60">60分足</button>
-  <button class="pill" data-ema="10">EMA10</button>
-  <button class="pill active" data-ema="20">EMA20</button>
+<div class="grid-row1">
+
+  <!-- Equity card -->
+  <div class="panel glow-pink">
+    <div class="panel-title">
+      <span>GRAVIA_001 · ACTIVE</span>
+      <span class="badge">LIVE</span>
+    </div>
+    <div class="equity-val" id="eqVal">$1.52</div>
+    <div class="equity-delta up" id="eqDelta">▲ 0.0% · 0 trades</div>
+    <canvas class="spark" id="eqSpark"></canvas>
+    <div class="equity-foot">
+      <div><span class="k">TRADES</span><span class="v" id="eqTrades">0</span></div>
+      <div><span class="k">WIN%</span><span class="v" id="eqWin">100.0%</span></div>
+      <div><span class="k">AVG/TR</span><span class="v" id="eqAvg">$0.00</span></div>
+    </div>
+  </div>
+
+  <!-- Candle chart -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>BTC/USD · OPTIONS CHAIN</span>
+      <span id="cPrice" class="price-now">$0.00</span>
+    </div>
+    <canvas id="candles"></canvas>
+    <div class="price-tag" style="text-align:center; margin-top:2px;">SIMULATED</div>
+    <div class="book" id="book"></div>
+  </div>
+
+  <!-- Streak card -->
+  <div class="panel glow-green">
+    <div class="panel-title">
+      <span>#1 TRADER · LIVE STREAK</span>
+    </div>
+    <div class="streak-row">
+      <span class="streak-x">X</span>
+      <span class="streak-n" id="streakN">+0</span>
+    </div>
+    <canvas id="streakbar"></canvas>
+    <div class="streak-foot">
+      <div><b id="streakBest">$0</b>BEST</div>
+      <div><b id="streakGain">+0%</b>GAIN</div>
+      <div><b id="streakDur">00:00</b>DUR</div>
+    </div>
+  </div>
 </div>
-<div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
-  無料データ源の制約上、過去のチャート履歴は取得できません。このページを開いている間、実際のレートを記録して少しずつチャートを作っていきます（記録は保存され、次回以降も引き継がれます）。指標が表示されるまで、しばらく時間がかかります。
+
+<!-- MicroFish -->
+<div class="panel microfish-wrap" style="position:relative;">
+  <div class="mf-head panel-title">
+    <span>MICROFISH · BTC</span>
+    <span id="mfPnl" class="badge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">+$0.00</span>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--pink)"></i>BEAR</span>
+    <span><i class="dot" style="background:var(--green)"></i>BULL</span>
+    <span><i class="dot" style="background:#8fa3ff"></i>MEDIAN</span>
+    <span><i class="dot" style="background:var(--amber)"></i>CATALYST</span>
+    <span><i class="dot" style="background:#ffffff88"></i>CLUSTER</span>
+  </div>
+  <div class="mf-stats">
+    <div><b id="mfConf">95.5%</b> CONF</div>
+    <div id="mfNodes">1,209 NODES</div>
+    <div id="mfLinks">653 LINKS</div>
+  </div>
+  <canvas id="microfish"></canvas>
 </div>
-<div class="cfg-row" style="padding:0 18px 14px; margin-top:0;">
-  <label>データ取得プロキシURL(CORS対策・任意)<input type="text" id="proxyUrlInput" placeholder="https://xxxx.workers.dev" style="width:260px;"></label>
-</div>
-<div style="padding:0 18px 6px; font-size:11.5px; color:var(--paper-dim); line-height:1.6;">
-freeforexapi.comは現在ほぼ機能しておらず、また本来ブラウザからの直接アクセス(CORS)にも対応していないため、GitHub Pages上ではレート取得に失敗し続けます。リポジトリ同梱の<code>cors-proxy-worker.js</code>(OANDA証券のプラクティス口座APIを使う版)をCloudflare Workersにデプロイし、発行されたURLを上の欄に貼り付けてください（OANDA証券の無料プラクティス口座のAPIトークンが別途必要です。詳しくはファイル冒頭のコメントを参照。未設定の場合は従来通りfreeforexapi.comへの直接アクセスを試みますが、動作しない可能性が高いです）。
-</div>
 
-<section>
-
-  <div class="card">
-    <h2>リアルタイムチャート(TradingView・目視参考用)</h2>
-    <div class="tradingview-widget-container">
-      <div id="tvChart"></div>
-    </div>
-    <div id="manualCheckPrompt" class="signal" style="display:none; margin-top:12px;">
-      <span class="tag high">⏰ 確認タイミング</span>
-      <span class="why" id="manualCheckText" style="flex:1;"></span>
-      <button class="btn-reset" id="manualCheckDismiss">閉じる</button>
-    </div>
-    <div id="h4CountdownTv" style="font-family:var(--mono); font-size:13px; color:var(--paper-dim); margin-top:10px;"></div>
-    <div class="breakeven-note">
-      TradingView提供のリアルタイムに近いチャートです。あくまで目視で参考にするためのもので、ここから下の気配盤自体の指標(SMA/RSI/H4×M15判定など)には反映されません。それらは引き続き「データ取得プロキシURL」で設定したデータソースを使用します。M15足が切り替わるたびに、下の指標が使えるかどうかに関わらず、このチャートでH4の重要ライン付近のブレイク→押し目/戻り→ピンバーを目視で確認するタイミングをお知らせします(通知はオプトイン、「H4×M15手法」カードのチェックボックスで設定できます)。
-    </div>
+<div class="grid-row3">
+  <!-- Equity curve -->
+  <div class="panel" style="position:relative;">
+    <div class="panel-title"><span>TOTAL EQUITY</span></div>
+    <div class="curve-total"><b id="curveVal">+$0.00</b>T <span id="curveT">0</span> · W <span id="curveW">100.0%</span></div>
+    <canvas id="equitycurve"></canvas>
   </div>
 
-  <div class="card">
-    <h2>価格チャート <span id="clock"></span></h2>
-    <div class="price-row">
-      <span class="price" id="priceNow">—</span>
-      <span id="priceChg" style="font-family:var(--mono); font-size:13px;"></span>
-    </div>
-    <div id="chartLoading" class="loading">読み込み中…</div>
-    <div id="bgGapNotice" class="loading" style="display:none; color:var(--brass);"></div>
-    <canvas id="priceChart" height="180"></canvas>
-  </div>
-
-  <div class="card">
-    <h2>RSI (14)</h2>
-    <canvas id="rsiChart" height="90"></canvas>
-    <div class="stat-grid">
-      <div class="stat"><div class="k">RSI</div><div class="v" id="rsiVal">—</div></div>
-      <div class="stat"><div class="k">SMA9</div><div class="v" id="sma9Val">—</div></div>
-      <div class="stat"><div class="k">SMA21</div><div class="v" id="sma21Val">—</div></div>
-      <div class="stat"><div class="k" id="emaLabel">EMA20</div><div class="v" id="ema20Val">—</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>参考シグナル（判断の補助材料。指示ではありません）</h2>
-    <div class="signal">
-      <span class="tag wait" id="signalTag">様子見</span>
-      <span class="why" id="signalWhy">データ取得中…</span>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>H4×M15 手法（①ライン特定→②実体ブレイク→③押し目/戻り→④ピンバー）</h2>
-    <div class="signal">
-      <span class="tag wait" id="h4Tag">様子見</span>
-      <span class="why" id="h4Why">データ取得中…</span>
-    </div>
-    <div id="h4Detail" style="font-family:var(--mono); font-size:12.5px; color:var(--brass); margin-top:10px;"></div>
-    <div id="h4Countdown" style="font-family:var(--mono); font-size:13px; color:var(--paper-dim); margin-top:8px;"></div>
-    <div class="cfg-row">
-      <label>ピンバー判定: ヒゲ/実体倍率<input type="number" id="pbWickMult" value="1.5" step="0.1" min="0.5"></label>
-      <label>ヒゲ/レンジ比率<input type="number" id="pbWickRatio" value="0.5" step="0.05" min="0.1" max="0.95"></label>
-      <label><input type="checkbox" id="alertToggle" style="margin-right:6px;">条件成立を通知(音+ブラウザ通知)</label>
-    </div>
-    <div class="breakeven-note">
-      H4の重要ラインは、何度も反発している価格帯を自動検出したものです。データが少ないうちは信頼度が低く、数日分のデータが蓄積されるまでは参考程度に見てください。利確・損切りの目安も、あくまで直前のルールをそのまま数値化したもので、成功を保証するものではありません。ピンバー判定の閾値は上の欄で調整でき、設定はブラウザに保存されます。「次の足の始まり」の残り時間はカウントダウンで、水準とピンバーの位置は価格チャート上にも表示されます。通知はあくまで「④条件成立」を知らせるだけで、エントリーを推奨するものではありません。
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>記録帳 <span id="tradeCount" style="color:var(--paper-dim); font-weight:400;"></span></h2>
-    <div class="journal-input">
-      <input type="number" id="amountInput" placeholder="金額(円・任意)" min="0">
-      <input type="number" id="pipsInput" placeholder="pips損益(任意)" step="0.1">
-      <input type="number" id="rInput" placeholder="R倍率(任意)" step="0.1">
-      <button class="btn-win" id="btnWin">勝ち を記録</button>
-      <button class="btn-loss" id="btnLoss">負け を記録</button>
-      <button class="btn-reset" id="btnReset">記録をリセット</button>
-    </div>
-    <canvas id="winrateChart" height="120"></canvas>
-    <div id="journalEmpty" class="empty">まだ記録がありません。取引の結果をここに記録すると、勝率の推移が見えてきます。</div>
-    <div class="stat-grid" id="pipsStatGrid" style="display:none;">
-      <div class="stat"><div class="k">合計pips</div><div class="v" id="pipsTotal">—</div></div>
-      <div class="stat"><div class="k">平均pips</div><div class="v" id="pipsAvg">—</div></div>
-      <div class="stat"><div class="k">平均R倍率</div><div class="v" id="rAvg">—</div></div>
-      <div class="stat"><div class="k">期待値(R)</div><div class="v" id="rExpectancy">—</div></div>
-    </div>
-    <div class="breakeven-note">
-      ペイアウト率<b>85%</b>の場合、損益分岐点となる勝率は <b>約54.1%</b>（1÷1.85）です。折れ線がこの水準を継続的に上回るかどうかが、実力か偶然かを見分ける目安になります。回数が少ないうちは大きくブレるので、最低でも50〜100回は記録することをおすすめします。pips・R倍率は任意入力です。入力した回のみ集計に使われます。
-    </div>
-    <table class="hist" id="histTable" style="display:none;">
-      <thead><tr><th>#</th><th>結果</th><th>金額</th><th>pips</th><th>R</th><th>時刻</th></tr></thead>
-      <tbody id="histBody"></tbody>
+  <!-- Trades table -->
+  <div class="panel">
+    <div class="panel-title"><span>RECENT FILLS</span></div>
+    <table class="trades" id="tradesTable">
+      <thead><tr><th>PRICE</th><th>WIN%</th><th>PNL</th></tr></thead>
+      <tbody id="tradesBody"></tbody>
     </table>
   </div>
 
-</section>
+  <!-- Volume -->
+  <div class="panel vol-charts">
+    <div class="panel-title"><span>VOLUME</span></div>
+    <canvas id="volPink"></canvas>
+    <div class="vol-label"><span id="volPinkLabel">0</span><span>SELL</span></div>
+    <canvas id="volGreen"></canvas>
+    <div class="vol-label"><span id="volGreenLabel">0</span><span>BUY</span></div>
+  </div>
+</div>
 
-<footer>データ提供: OANDA証券プラクティス口座API(プロキシURL設定時) / freeforexapi.com（このツール自体は取引の実行は行いません。記録はこのブラウザ内(localStorage)に保存されます）</footer>
+<!-- Execution log -->
+<div class="panel logpanel">
+  <div class="panel-title"><span><span class="live-dot"></span>EXECUTION LOG · LIVE</span></div>
+  <div class="logbody" id="logBody"></div>
+</div>
 
+<div class="footer-note">GRAVIA DASHBOARD — 全データはシミュレーションです。実データ接続については README を参照してください。</div>
+
+<script src="config.js"></script>
 <script>
-const PAIRS = ['USDJPY','EURJPY','GBPJPY'];
-const PAIR_TO_TV_SYMBOL = { USDJPY:'OANDA:USDJPY', EURJPY:'OANDA:EURJPY', GBPJPY:'OANDA:GBPJPY' };
+/* =========================================================
+   GRAVIA DASHBOARD
+   ---------------------------------------------------------
+   MetaApi(https://metaapi.cloud)のトークン・口座IDは、このファイルではなく
+   config.js(Gitにコミットされない)側で設定します。設定方法はREADME.mdを
+   参照してください。config.jsが存在しない場合は自動的にシミュレーション
+   モードで動作します。
+   ========================================================= */
+if(typeof CONFIG === 'undefined'){
+  // config.js が存在しない(未設定、またはGitHub Pages上でシークレットが
+  // 意図的に配信されていない)場合の安全なフォールバック。
+  window.CONFIG = { METAAPI_TOKEN:'', METAAPI_ACCOUNT_ID:'', METAAPI_REGION:'new-york', SYMBOL:'BTCUSD', POLL_MS:5000 };
+}
+const LIVE_MODE = !!(CONFIG.METAAPI_TOKEN && CONFIG.METAAPI_ACCOUNT_ID);
+const API_BASE = `https://mt-client-api-v1.${CONFIG.METAAPI_REGION}.agiliumtrade.ai`;
+const MARKET_DATA_BASE = `https://mt-market-data-client-api-v1.${CONFIG.METAAPI_REGION}.agiliumtrade.ai`;
 
-// TradingView's embed widget is display-only (no raw data can be pulled out of it into
-// our own indicators) — it's shown purely as a real, visually-referenced live chart
-// alongside the app's own SMA/RSI/H4×M15 analysis, which keeps using whatever data
-// source is configured above.
-function initTradingViewWidget(){
-  const container = document.getElementById('tvChart');
-  if(!container || typeof TradingView === 'undefined') return;
-  container.innerHTML = '';
-  new TradingView.widget({
-    autosize: true,
-    symbol: PAIR_TO_TV_SYMBOL[state.symbol] || 'OANDA:USDJPY',
-    interval: '15',
-    timezone: 'Asia/Tokyo',
-    theme: 'dark',
-    style: '1',
-    locale: 'ja',
-    toolbar_bg: '#132427',
-    enable_publishing: false,
-    hide_side_toolbar: false,
-    allow_symbol_change: false,
-    container_id: 'tvChart',
+// ---------- State ----------
+const state = {
+  equity: 1.52,
+  equityHistory: [1.52],
+  price: 78150.00,
+  priceHistory: [],
+  candles: [],
+  trades: 0,
+  totalTrades: 268,
+  wins: 0,
+  streak: 0,
+  bestStreak: 0,
+  pnl: 0,
+  logs: [],
+  sellVols: [],
+  buyVols: [],
+  nodes: null,
+};
+
+function rnd(min, max){ return Math.random()*(max-min)+min; }
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function fmt(n, d=2){ return n.toLocaleString('en-US',{minimumFractionDigits:d, maximumFractionDigits:d}); }
+function fmtMoney(n){
+  if(Math.abs(n) >= 1000) return '$'+fmt(n,0);
+  return '$'+fmt(n,2);
+}
+
+// ---------- Simulated data source (swap point) ----------
+function simulateTick(){
+  // price random walk
+  state.price += rnd(-40, 46);
+  state.priceHistory.push(state.price);
+  if(state.priceHistory.length > 40) state.priceHistory.shift();
+
+  // candle build (every 4 ticks -> new candle)
+  if(state.candles.length === 0 || Math.random() < 0.28){
+    const open = state.price + rnd(-15,15);
+    const close = state.price;
+    const high = Math.max(open,close) + rnd(2,20);
+    const low = Math.min(open,close) - rnd(2,20);
+    state.candles.push({open, close, high, low});
+    if(state.candles.length > 26) state.candles.shift();
+  }
+
+  // occasional trade event
+  if(Math.random() < 0.55){
+    state.trades += 1;
+    const win = Math.random() < 0.86; // high win rate like the reference
+    if(win){ state.wins += 1; state.streak += 1; }
+    else { state.streak = 0; }
+    state.bestStreak = Math.max(state.bestStreak, state.streak);
+
+    const pnlTrade = win ? rnd(0.4, state.equity*0.18+2) : -rnd(0.2, state.equity*0.08+1);
+    state.equity = Math.max(0.2, state.equity + pnlTrade);
+    state.pnl += pnlTrade;
+    state.equityHistory.push(state.equity);
+    if(state.equityHistory.length > 200) state.equityHistory.shift();
+
+    const winPct = (state.trades? (state.wins/state.trades*100):100);
+    state.trades = Math.min(state.trades, state.totalTrades);
+
+    // trades table row
+    state.lastTrade = {
+      price: state.price,
+      winPct,
+      pnl: pnlTrade
+    };
+    pushTradeRow(state.lastTrade);
+
+    // log line
+    pushLog(win, state.price, pnlTrade);
+
+    // volumes
+    state.sellVols.push(rnd(2,60));
+    state.buyVols.push(rnd(2,60));
+    if(state.sellVols.length>28) state.sellVols.shift();
+    if(state.buyVols.length>28) state.buyVols.shift();
+  }
+
+  return state;
+}
+
+let tradesTableRows = [];
+function pushTradeRow(t){
+  tradesTableRows.unshift(t);
+  if(tradesTableRows.length > 7) tradesTableRows.pop();
+}
+
+const logMessages = [
+  'signal confirmed · arbitrage window',
+  'liquidity tag matched',
+  'still open · watching VM log',
+  'order sync complete',
+  'spread narrowed · reentry armed',
+  'cluster shift detected',
+  'confidence recalculated',
+];
+function pushLog(win, price, pnl){
+  const now = new Date();
+  const t = now.toTimeString().slice(0,8);
+  const tag = win ? 'WIN' : (Math.random()<0.5?'IN':'TICK');
+  const msg = choice(logMessages);
+  state.logs.push({t, tag, price, pnl, msg});
+  if(state.logs.length > 60) state.logs.shift();
+}
+
+// =========================================================
+// LIVE DATA (MetaApi / MT5)
+// =========================================================
+let liveInitialEquity = null;
+let liveKnownDealIds = new Set();
+
+async function metaApiFetch(url){
+  const res = await fetch(url, { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
+  if(!res.ok) throw new Error(url + ' -> HTTP ' + res.status);
+  return res.json();
+}
+
+async function fetchLiveData(){
+  const base = `${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
+  const now = new Date();
+  const from = new Date(now.getTime() - 24*60*60*1000);
+
+  const [account, positions, deals] = await Promise.all([
+    metaApiFetch(`${base}/account-information`),
+    metaApiFetch(`${base}/positions`).catch(()=>[]),
+    metaApiFetch(`${base}/history-deals/time/${from.toISOString()}/${now.toISOString()}`).catch(()=>[]),
+  ]);
+
+  // candles are optional — a separate host, and can be slow/unsupported for some symbols
+  let candles = null;
+  try{
+    const cbase = `${MARKET_DATA_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
+    candles = await metaApiFetch(`${cbase}/historical-market-data/symbols/${CONFIG.SYMBOL}/timeframes/1m/candles?limit=26`);
+  }catch(e){ /* leave candles as-is if unavailable */ }
+
+  return {account, positions, deals, candles};
+}
+
+function mapLiveDataToState(data){
+  const { account, positions, deals, candles } = data;
+
+  if(liveInitialEquity === null) liveInitialEquity = account.equity;
+  state.equity = account.equity;
+  state.balance = account.balance;
+  state.equityHistory.push(account.equity);
+  if(state.equityHistory.length > 200) state.equityHistory.shift();
+
+  // price: prefer an open position's current price, else last candle close
+  if(positions && positions.length){
+    state.price = positions[0].currentPrice;
+  } else if(candles && candles.length){
+    state.price = candles[candles.length-1].close;
+  }
+  state.priceHistory.push(state.price);
+  if(state.priceHistory.length > 40) state.priceHistory.shift();
+
+  if(candles && candles.length){
+    state.candles = candles.slice(-26).map(c=>({open:c.open, high:c.high, low:c.low, close:c.close}));
+  }
+
+  // closed trades (deals with a realized profit, excluding balance ops etc.)
+  const closed = (deals||[]).filter(d => (d.entryType === 'DEAL_ENTRY_OUT' || d.entryType === 'DEAL_ENTRY_OUT_BY') && typeof d.profit === 'number');
+  closed.sort((a,b)=> new Date(a.time) - new Date(b.time));
+
+  state.trades = closed.length;
+  state.wins = closed.filter(d=>d.profit > 0).length;
+  state.pnl = closed.reduce((sum,d)=> sum + d.profit + (d.commission||0) + (d.swap||0), 0);
+
+  // streak = consecutive wins counting back from the most recent closed trade
+  let streak = 0;
+  for(let i=closed.length-1;i>=0;i--){
+    if(closed[i].profit > 0) streak++; else break;
+  }
+  state.streak = streak;
+  state.bestStreak = Math.max(state.bestStreak, streak);
+
+  // new trades only, for table + log + volume bars (avoid re-announcing old ones every poll)
+  const freshDeals = closed.filter(d => !liveKnownDealIds.has(d.id));
+  freshDeals.forEach(d=>{
+    liveKnownDealIds.add(d.id);
+    const winPct = state.trades ? (state.wins/state.trades*100) : 100;
+    const row = { price: d.price, winPct, pnl: d.profit };
+    pushTradeRow(row);
+    pushLog(d.profit > 0, d.price, d.profit);
+    if(d.type === 'DEAL_TYPE_SELL'){ state.sellVols.push(d.volume); if(state.sellVols.length>28) state.sellVols.shift(); }
+    else { state.buyVols.push(d.volume); if(state.buyVols.length>28) state.buyVols.shift(); }
   });
-}
-const state = { symbol:'USDJPY', interval:'30', emaPeriod:20, trades:[], candlesAll:{USDJPY:[],EURJPY:[],GBPJPY:[]}, pollTimer:null, pollFailCount:0, pollRetryTimer:null, polling:false, lastH4Key:{USDJPY:null,EURJPY:null,GBPJPY:null}, lastSuccessAt:null, bgGapNoticeTimer:null, lastM15Boundary:null, manualCheckTimer:null };
-let priceChart, rsiChart, winrateChart;
 
-function fmt(n, d=2){ return Number(n).toLocaleString('ja-JP',{minimumFractionDigits:d, maximumFractionDigits:d}); }
-
-function sma(arr, period){
-  const out = new Array(arr.length).fill(null);
-  let sum = 0;
-  for(let i=0;i<arr.length;i++){
-    sum += arr[i];
-    if(i>=period) sum -= arr[i-period];
-    if(i>=period-1) out[i] = sum/period;
-  }
-  return out;
+  return state;
 }
 
-function ema(arr, period){
-  const out = new Array(arr.length).fill(null);
-  const k = 2/(period+1);
-  let prev = null;
-  for(let i=0;i<arr.length;i++){
-    if(i===period-1){
-      // seed with SMA of the first `period` values
-      let seed = 0;
-      for(let j=0;j<period;j++) seed += arr[j];
-      prev = seed/period;
-      out[i] = prev;
-    } else if(i>=period){
-      prev = arr[i]*k + prev*(1-k);
-      out[i] = prev;
-    }
-  }
-  return out;
-}
-
-function rsi(closes, period=14){
-  const out = new Array(closes.length).fill(null);
-  let gains=0, losses=0;
-  for(let i=1;i<closes.length;i++){
-    const diff = closes[i]-closes[i-1];
-    const gain = diff>0?diff:0;
-    const loss = diff<0?-diff:0;
-    if(i<=period){
-      gains += gain; losses += loss;
-      if(i===period){
-        const rs = losses===0 ? 100 : gains/losses;
-        out[i] = 100 - (100/(1+rs));
-      }
-    } else {
-      gains = (gains*(period-1)+gain)/period;
-      losses = (losses*(period-1)+loss)/period;
-      const rs = losses===0 ? 100 : gains/losses;
-      out[i] = 100 - (100/(1+rs));
-    }
-  }
-  return out;
-}
-
-// --- Live rate polling + local candle building (free no-key source has no historical intraday data) ---
-const DIRECT_QUOTE_URL = 'https://www.freeforexapi.com/api/live?pairs=USDJPY,EURJPY,GBPJPY';
-
-function getProxyUrl(){
-  try{ return (localStorage.getItem('kiseiban:proxyUrl') || '').trim(); }catch(e){ return ''; }
-}
-
-function loadProxyConfig(){
+async function liveTick(){
   try{
-    document.getElementById('proxyUrlInput').value = getProxyUrl();
-  }catch(e){ /* best effort */ }
-}
-
-document.getElementById('proxyUrlInput').addEventListener('change', (e)=>{
-  try{ localStorage.setItem('kiseiban:proxyUrl', e.target.value.trim()); }catch(err){ /* best effort */ }
-  state.pollFailCount = 0;
-  if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer=null; }
-  poll();
-});
-
-async function fetchQuote(){
-  // freeforexapi.com does not support CORS from a browser origin (e.g. GitHub Pages),
-  // so a user-supplied server-side proxy (see cors-proxy-worker.js) can stand in for it.
-  const proxy = getProxyUrl();
-  const url = proxy || DIRECT_QUOTE_URL;
-  const res = await fetch(url);
-  const text = await res.text();
-  let data;
-  try{
-    data = JSON.parse(text);
-  }catch(e){
-    throw new Error(`JSONとして解釈できません(HTTP ${res.status}): ${text.slice(0,160)}`);
-  }
-  if(!data || !data.rates){
-    throw new Error(`ratesが含まれていません(HTTP ${res.status}): ${text.slice(0,160)}`);
-  }
-  return data.rates; // { USDJPY:{rate,timestamp}, ... }
-}
-
-async function loadAllCandles(){
-  for(const p of PAIRS){
-    try{
-      const raw = localStorage.getItem('kiseiban:candles1m:'+p);
-      state.candlesAll[p] = raw ? JSON.parse(raw) : [];
-    }catch(e){
-      state.candlesAll[p] = [];
-    }
+    const data = await fetchLiveData();
+    mapLiveDataToState(data);
+    driftNodes(); // MicroFish stays a decorative sentiment visual — MT5 has no equivalent clustering data
+    renderAll();
+  }catch(err){
+    console.error('Gravia live data error:', err);
+    const el = document.getElementById('logBody');
+    if(el) el.insertAdjacentHTML('beforeend', `<div class="logline" style="color:#ff2e88">LIVE DATA ERROR: ${err.message}</div>`);
   }
 }
 
-async function saveCandles(pair){
-  try{
-    const arr = state.candlesAll[pair];
-    if(arr.length > 1500) state.candlesAll[pair] = arr.slice(-1500);
-    localStorage.setItem('kiseiban:candles1m:'+pair, JSON.stringify(state.candlesAll[pair]));
-  }catch(e){ /* best effort — storage may be full or unavailable */ }
-}
-
-function scheduleRetry(){
-  if(state.pollRetryTimer) clearTimeout(state.pollRetryTimer);
-  const delay = Math.min(5000 * Math.pow(2, state.pollFailCount-1), 60000); // 5s,10s,20s,40s,60s cap
-  state.pollRetryTimer = setTimeout(poll, delay);
-}
-
-function showPollError(count, err){
-  const loading = document.getElementById('chartLoading');
-  loading.style.display='block';
-  loading.classList.add('error');
-  const now = new Date().toLocaleTimeString('ja-JP');
-  const detail = err && err.message ? ` [詳細: ${err.name || 'Error'}: ${err.message}]` : '';
-  loading.textContent = `データ取得に失敗しました(${count}回連続, 最終試行 ${now})。自動的に再試行します。${detail}`;
-}
-
-async function poll(){
-  if(state.polling) return;
-  state.polling = true;
-  try{
-    const rates = await fetchQuote();
-    const now = Date.now();
-    const minuteStart = Math.floor(now/60000)*60000;
-    PAIRS.forEach(p=>{
-      const r = rates[p];
-      if(!r) return;
-      const arr = state.candlesAll[p];
-      const last = arr[arr.length-1];
-      if(last && last.t === minuteStart){
-        last.h = Math.max(last.h, r.rate);
-        last.l = Math.min(last.l, r.rate);
-        last.c = r.rate;
-      } else {
-        arr.push({ t:minuteStart, o:r.rate, h:r.rate, l:r.rate, c:r.rate });
-      }
+// ---------- MicroFish nodes (init once, drift over time) ----------
+function initNodes(){
+  const types = [
+    {k:'bear', color:'#ff2e88', w:5},
+    {k:'bull', color:'#28ffb0', w:5},
+    {k:'median', color:'#8fa3ff', w:3},
+    {k:'catalyst', color:'#ffcc55', w:2},
+    {k:'cluster', color:'#ffffff88', w:2},
+  ];
+  const nodes = [];
+  for(let i=0;i<70;i++){
+    const t = choice(types);
+    nodes.push({
+      x: rnd(0.05,0.95),
+      y: rnd(0.1,0.9),
+      r: rnd(1.5, t.k==='cluster'? 14: 5),
+      color: t.color,
+      vx: rnd(-0.0006,0.0006),
+      vy: rnd(-0.0004,0.0004),
+      pulse: rnd(0,Math.PI*2)
     });
-    state.pollFailCount = 0;
-    state.lastSuccessAt = now;
-    if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer=null; }
-    document.getElementById('chartLoading').classList.remove('error');
-    render();
-    PAIRS.forEach(saveCandles);
-    checkAllH4Alerts();
-  }catch(e){
-    state.pollFailCount++;
-    showPollError(state.pollFailCount, e);
-    scheduleRetry();
-  } finally {
-    state.polling = false;
   }
+  state.nodes = nodes;
 }
 
-function resample(candles1m, intervalMin, cap=100){
-  if(!candles1m.length) return [];
-  const bucketMs = intervalMin*60000;
-  const out = [];
-  candles1m.forEach(c=>{
-    const bucketT = Math.floor(c.t/bucketMs)*bucketMs;
-    const cur = out[out.length-1];
-    if(cur && cur.t===bucketT){
-      cur.h = Math.max(cur.h, c.h);
-      cur.l = Math.min(cur.l, c.l);
-      cur.c = c.c;
-    } else {
-      out.push({ t:bucketT, o:c.o, h:c.h, l:c.l, c:c.c });
-    }
+function driftNodes(){
+  state.nodes.forEach(n=>{
+    n.x += n.vx; n.y += n.vy; n.pulse += 0.05;
+    if(n.x<0.02||n.x>0.98) n.vx *= -1;
+    if(n.y<0.05||n.y>0.95) n.vy *= -1;
   });
-  return out.slice(-cap);
 }
 
-// --- H4×M15 strategy: find a reaction level on H4, confirm a body breakout on M15,
-// wait for a pullback to the level, and look for a bullish pin bar there ---
-function findPivots(candles, w=2){
-  const highs=[], lows=[];
-  for(let i=w;i<candles.length-w;i++){
-    let isHigh=true, isLow=true;
-    for(let j=i-w;j<=i+w;j++){
-      if(j===i) continue;
-      if(candles[j].h >= candles[i].h) isHigh=false;
-      if(candles[j].l <= candles[i].l) isLow=false;
-    }
-    if(isHigh) highs.push({price:candles[i].h, t:candles[i].t});
-    if(isLow) lows.push({price:candles[i].l, t:candles[i].t});
-  }
-  return highs.concat(lows);
+// =========================================================
+// RENDERING
+// =========================================================
+function hidpiCanvas(cv){
+  const dpr = window.devicePixelRatio || 1;
+  const rect = cv.getBoundingClientRect();
+  if(rect.width === 0) return null;
+  cv.width = rect.width * dpr;
+  cv.height = rect.height * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx, w:rect.width, h:rect.height};
 }
 
-function clusterLevels(pivots, tolerance){
-  const clusters = [];
-  pivots.forEach(p=>{
-    const found = clusters.find(c => Math.abs(c.price - p.price) <= tolerance);
-    if(found){
-      found.price = (found.price*found.touches + p.price)/(found.touches+1);
-      found.touches++;
-      found.lastT = p.t;
-    } else {
-      clusters.push({ price:p.price, touches:1, lastT:p.t });
-    }
+function drawSpark(cv, data, color){
+  const c = hidpiCanvas(cv); if(!c) return;
+  const {ctx,w,h} = c;
+  ctx.clearRect(0,0,w,h);
+  if(data.length<2) return;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = (max-min)||1;
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x = i/(data.length-1)*w;
+    const y = h - ((v-min)/range)*h*0.85 - h*0.05;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   });
-  return clusters.filter(c => c.touches >= 2);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, color+'55'); grad.addColorStop(1, color+'00');
+  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
 }
 
-function getPinbarConfig(){
-  const wickMult = parseFloat(document.getElementById('pbWickMult').value);
-  const wickRatio = parseFloat(document.getElementById('pbWickRatio').value);
-  return {
-    wickMult: isNaN(wickMult) ? 1.5 : wickMult,
-    wickRatio: isNaN(wickRatio) ? 0.5 : wickRatio,
-  };
-}
-
-function loadPinbarConfig(){
-  try{
-    const raw = localStorage.getItem('kiseiban:pinbarCfg');
-    if(raw){
-      const cfg = JSON.parse(raw);
-      if(cfg.wickMult!=null) document.getElementById('pbWickMult').value = cfg.wickMult;
-      if(cfg.wickRatio!=null) document.getElementById('pbWickRatio').value = cfg.wickRatio;
-    }
-  }catch(e){ /* best effort */ }
-}
-
-function savePinbarConfig(){
-  try{
-    localStorage.setItem('kiseiban:pinbarCfg', JSON.stringify(getPinbarConfig()));
-  }catch(e){ /* best effort */ }
-}
-
-// --- H4×M15 strategy: find a reaction level on H4, confirm a body breakout on M15
-// (either direction), wait for a pullback to the level, and look for a pin bar
-// there — bullish (long) after an upside break, bearish (short) after a downside break ---
-function analyzeH4M15(symbol){
-  const candles1m = state.candlesAll[symbol];
-  if(!candles1m.length) return { status:'building', h4count:0, needed:12 };
-
-  const price = candles1m[candles1m.length-1].c;
-  const h4 = resample(candles1m, 240, 90);
-  if(h4.length < 12) return { status:'building', h4count:h4.length, needed:12 };
-
-  const tolerance = price*0.001; // roughly 10-15 pips clustering window on JPY pairs
-  const levels = clusterLevels(findPivots(h4,2), tolerance);
-  if(!levels.length) return { status:'no_levels' };
-
-  levels.sort((a,b)=>Math.abs(a.price-price)-Math.abs(b.price-price));
-  const level = levels[0];
-
-  const m15 = resample(candles1m, 15, 200);
-
-  // Track the last upward cross and the last downward cross independently. A pullback
-  // after a breakout normally re-crosses the level on its way back — that must not be
-  // mistaken for a fresh breakout in the opposite direction, so each direction's most
-  // recent breakout is evaluated on its own, forward from its own index.
-  let lastUpIdx = -1, lastDownIdx = -1;
-  for(let i=1;i<m15.length;i++){
-    if(m15[i-1].c <= level.price && m15[i].c > level.price) lastUpIdx = i;
-    if(m15[i-1].c >= level.price && m15[i].c < level.price) lastDownIdx = i;
+function drawCandles(){
+  const cv = document.getElementById('candles');
+  const c = hidpiCanvas(cv); if(!c) return;
+  const {ctx,w,h} = c;
+  ctx.clearRect(0,0,w,h);
+  const data = state.candles;
+  if(data.length<1) return;
+  const allVals = data.flatMap(d=>[d.high,d.low]);
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = (max-min)||1;
+  const cw = w/data.length;
+  data.forEach((d,i)=>{
+    const x = i*cw + cw/2;
+    const up = d.close >= d.open;
+    ctx.strokeStyle = up ? '#28ffb0' : '#ff2e88';
+    ctx.fillStyle = up ? '#28ffb0' : '#ff2e88';
+    const yHigh = h - ((d.high-min)/range)*h*0.9 - h*0.05;
+    const yLow  = h - ((d.low-min)/range)*h*0.9 - h*0.05;
+    const yOpen = h - ((d.open-min)/range)*h*0.9 - h*0.05;
+    const yClose= h - ((d.close-min)/range)*h*0.9 - h*0.05;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x,yHigh); ctx.lineTo(x,yLow); ctx.stroke();
+    const bw = Math.max(2, cw*0.5);
+    ctx.fillRect(x-bw/2, Math.min(yOpen,yClose), bw, Math.max(1,Math.abs(yClose-yOpen)));
+  });
+  // price label line
+  if(state.priceHistory.length){
+    const last = state.priceHistory[state.priceHistory.length-1];
+    const y = h - ((last-min)/range)*h*0.9 - h*0.05;
+    ctx.strokeStyle = '#ffffff33'; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    ctx.setLineDash([]);
   }
-  if(lastUpIdx === -1 && lastDownIdx === -1) return { status:'level_found', level, price };
+}
 
-  const pb = getPinbarConfig();
-  function findPinbar(breakoutIdx, direction){
-    let pinbarIdx = -1;
-    for(let i=breakoutIdx+1;i<m15.length;i++){
-      const c = m15[i];
-      const body = Math.abs(c.c-c.o);
-      const range = c.h-c.l;
-      if(range<=0) continue;
-      if(direction==='long'){
-        const lowerWick = Math.min(c.o,c.c)-c.l;
-        const nearLevel = c.l <= level.price + tolerance*0.4 && c.l >= level.price - tolerance*1.5;
-        const isPinbar = lowerWick >= body*pb.wickMult && (lowerWick/range) >= pb.wickRatio && c.c >= c.o;
-        if(nearLevel && isPinbar) pinbarIdx = i;
-      } else {
-        const upperWick = c.h - Math.max(c.o,c.c);
-        const nearLevel = c.h >= level.price - tolerance*0.4 && c.h <= level.price + tolerance*1.5;
-        const isPinbar = upperWick >= body*pb.wickMult && (upperWick/range) >= pb.wickRatio && c.c <= c.o;
-        if(nearLevel && isPinbar) pinbarIdx = i;
+function drawStreakBar(){
+  const cv = document.getElementById('streakbar');
+  const c = hidpiCanvas(cv); if(!c) return;
+  const {ctx,w,h} = c;
+  ctx.clearRect(0,0,w,h);
+  const n = 20;
+  const bw = w/n;
+  for(let i=0;i<n;i++){
+    const win = Math.random() < 0.82;
+    const bh = rnd(h*0.2, h*0.95);
+    ctx.fillStyle = win ? '#28ffb0aa' : '#ff2e88aa';
+    ctx.fillRect(i*bw+1, h-bh, bw-2, bh);
+  }
+}
+
+function drawMicrofish(){
+  const cv = document.getElementById('microfish');
+  const c = hidpiCanvas(cv); if(!c) return;
+  const {ctx,w,h} = c;
+  ctx.clearRect(0,0,w,h);
+  // faint connecting lines for nearby nodes
+  const pts = state.nodes;
+  ctx.lineWidth = 0.5;
+  for(let i=0;i<pts.length;i++){
+    for(let j=i+1;j<pts.length;j++){
+      const a=pts[i], b=pts[j];
+      const dx=(a.x-b.x)*w, dy=(a.y-b.y)*h;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if(d < 55){
+        ctx.strokeStyle = 'rgba(150,160,200,'+(0.08*(1-d/55))+')';
+        ctx.beginPath(); ctx.moveTo(a.x*w,a.y*h); ctx.lineTo(b.x*w,b.y*h); ctx.stroke();
       }
     }
-    return pinbarIdx;
   }
-
-  const longEval = lastUpIdx !== -1 ? { breakoutIdx:lastUpIdx, pinbarIdx: findPinbar(lastUpIdx,'long') } : null;
-  const shortEval = lastDownIdx !== -1 ? { breakoutIdx:lastDownIdx, pinbarIdx: findPinbar(lastDownIdx,'short') } : null;
-
-  // Prefer a completed signal; if both directions signal, the more recent pin bar wins.
-  // Otherwise prefer whichever breakout is more recent (still just "waiting" for a pin bar).
-  let direction, chosen;
-  const longSignals = !!(longEval && longEval.pinbarIdx !== -1);
-  const shortSignals = !!(shortEval && shortEval.pinbarIdx !== -1);
-  if(longSignals && shortSignals){
-    direction = longEval.pinbarIdx >= shortEval.pinbarIdx ? 'long' : 'short';
-    chosen = direction==='long' ? longEval : shortEval;
-  } else if(longSignals){
-    direction = 'long'; chosen = longEval;
-  } else if(shortSignals){
-    direction = 'short'; chosen = shortEval;
-  } else {
-    direction = lastUpIdx >= lastDownIdx ? 'long' : 'short';
-    chosen = direction==='long' ? longEval : shortEval;
-  }
-
-  if(chosen.pinbarIdx === -1) return { status:'breakout', level, breakoutTime:m15[chosen.breakoutIdx].t, direction };
-
-  const pinbarIdx = chosen.pinbarIdx;
-  const lookback = m15.slice(Math.max(0,pinbarIdx-30), pinbarIdx);
-  if(direction==='long'){
-    const tp = lookback.length ? Math.max(...lookback.map(c=>c.h)) : level.price + tolerance*2;
-    const sl = level.price - 0.10; // 10 pips below the level, JPY pairs
-    return { status:'signal', direction, level, tp, sl, pinbarTime:m15[pinbarIdx].t, price };
-  } else {
-    const tp = lookback.length ? Math.min(...lookback.map(c=>c.l)) : level.price - tolerance*2;
-    const sl = level.price + 0.10; // 10 pips above the level, JPY pairs
-    return { status:'signal', direction, level, tp, sl, pinbarTime:m15[pinbarIdx].t, price };
-  }
-}
-
-function renderH4M15(r){
-  const tag = document.getElementById('h4Tag');
-  const why = document.getElementById('h4Why');
-  const detail = document.getElementById('h4Detail');
-
-  if(r.status==='building'){
-    tag.className='tag wait'; tag.textContent='データ蓄積中';
-    why.textContent = `4時間足がまだ${r.h4count}本しかありません(目安:${r.needed}本=2日分)。H4の重要ラインを見つけるには数日かかります。`;
-    detail.textContent='';
-    return;
-  }
-  if(r.status==='no_levels'){
-    tag.className='tag wait'; tag.textContent='ライン未検出';
-    why.textContent='2回以上反発している水準がまだ見つかっていません。データが増えるのを待ってください。';
-    detail.textContent='';
-    return;
-  }
-  if(r.status==='level_found'){
-    tag.className='tag wait'; tag.textContent='①ライン特定・ブレイク待ち';
-    why.textContent=`直近で最も意識されていそうな水準は ${fmt(r.level.price,3)}(${r.level.touches}回反発)。ここを実体で上抜けるのを待っている段階です。`;
-    detail.textContent='';
-    return;
-  }
-  if(r.status==='breakout'){
-    tag.className='tag wait';
-    if(r.direction==='long'){
-      tag.textContent='②ブレイク確認・押し目待ち(LONG)';
-      why.textContent=`${fmt(r.level.price,3)}を実体で上抜けました。すぐには飛びつかず、この水準まで戻って陽線のピンバーが出るのを待っている段階です。`;
-    } else {
-      tag.textContent='②ブレイク確認・戻り待ち(SHORT)';
-      why.textContent=`${fmt(r.level.price,3)}を実体で下抜けました。すぐには飛びつかず、この水準まで戻って陰線のピンバーが出るのを待っている段階です。`;
-    }
-    detail.textContent='';
-    return;
-  }
-  if(r.status==='signal'){
-    if(r.direction==='long'){
-      tag.className='tag high'; tag.textContent='④条件成立(参考) LONG';
-      why.textContent=`${fmt(r.level.price,3)}まで押し目が入り、陽線のピンバーを確認しました。次の足の始まりが、このルールでのロング検討タイミングです。`;
-      detail.textContent = `利確目安: ${fmt(r.tp,3)}(直近レジスタンス) ／ 損切り目安: ${fmt(r.sl,3)}(ライン-10pips)`;
-    } else {
-      tag.className='tag low'; tag.textContent='④条件成立(参考) SHORT';
-      why.textContent=`${fmt(r.level.price,3)}まで戻りが入り、陰線のピンバーを確認しました。次の足の始まりが、このルールでのショート検討タイミングです。`;
-      detail.textContent = `利確目安: ${fmt(r.tp,3)}(直近サポート) ／ 損切り目安: ${fmt(r.sl,3)}(ライン+10pips)`;
-    }
-  }
-}
-
-// --- Entry timing: countdown to the next M15 candle, and an opt-in alert (sound +
-// browser notification) fired once when a symbol's H4×M15 status newly becomes 'signal'.
-// The countdown itself is clock-based (no price data needed), so it keeps working even
-// when the data feed is down — that's also used to prompt a manual TradingView check at
-// each M15 boundary, independent of whether our own analysis pipeline has usable data. ---
-function updateH4Countdown(){
-  const bucketMs = 15*60000;
-  const now = Date.now();
-  const currentBoundary = Math.floor(now/bucketMs)*bucketMs;
-  const next = currentBoundary + bucketMs;
-  const remain = Math.max(0, next-now);
-  const mm = String(Math.floor(remain/60000)).padStart(2,'0');
-  const ss = String(Math.floor((remain%60000)/1000)).padStart(2,'0');
-  const text = `次のM15足の始まりまで ${mm}:${ss}`;
-  ['h4Countdown','h4CountdownTv'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.textContent = text;
-  });
-
-  if(state.lastM15Boundary !== null && currentBoundary !== state.lastM15Boundary){
-    onNewM15Candle();
-  }
-  state.lastM15Boundary = currentBoundary;
-}
-
-function onNewM15Candle(){
-  showManualCheckPrompt();
-  const toggle = document.getElementById('alertToggle');
-  if(toggle && toggle.checked){
-    playBeep();
-    notifyManualCheck();
-  }
-}
-
-function showManualCheckPrompt(){
-  const el = document.getElementById('manualCheckPrompt');
-  const text = document.getElementById('manualCheckText');
-  if(!el || !text) return;
-  text.textContent = `新しいM15足が始まりました。上のTradingViewチャートで、H4の重要ライン付近のブレイク→押し目/戻り→ピンバーが出ていないか目視で確認してください(参考情報。エントリーを推奨するものではありません)。`;
-  el.style.display = 'flex';
-  if(state.manualCheckTimer) clearTimeout(state.manualCheckTimer);
-  state.manualCheckTimer = setTimeout(()=>{ el.style.display = 'none'; }, 3*60000);
-}
-
-function notifyManualCheck(){
-  if(!('Notification' in window) || Notification.permission !== 'granted') return;
-  try{
-    new Notification('気配盤 — 確認タイミング', {
-      body: '新しいM15足が始まりました。TradingViewでH4水準付近のピンバーを目視確認してください(参考情報)。',
-    });
-  }catch(e){ /* best effort */ }
-}
-
-function playBeep(){
-  try{
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if(!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.value = 0.15;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    setTimeout(()=>{ osc.stop(); ctx.close(); }, 300);
-  }catch(e){ /* best effort */ }
-}
-
-function pairLabel(symbol){
-  return symbol==='USDJPY' ? 'USD/JPY' : symbol==='EURJPY' ? 'EUR/JPY' : 'GBP/JPY';
-}
-
-function notifyH4Signal(symbol, direction){
-  if(!('Notification' in window) || Notification.permission !== 'granted') return;
-  try{
-    new Notification('気配盤 — 条件成立(参考)', {
-      body: `${pairLabel(symbol)}: ${direction==='long'?'LONG':'SHORT'}方向の条件が成立しました(参考情報。勝敗を保証するものではありません)。`,
-    });
-  }catch(e){ /* best effort */ }
-}
-
-function checkH4Alert(symbol, r){
-  const key = r.status + (r.direction ? ':'+r.direction : '');
-  const prevKey = state.lastH4Key[symbol];
-  state.lastH4Key[symbol] = key;
-  const toggle = document.getElementById('alertToggle');
-  if(!toggle || !toggle.checked) return;
-  if(r.status==='signal' && key!==prevKey){
-    playBeep();
-    notifyH4Signal(symbol, r.direction);
-  }
-}
-
-function checkAllH4Alerts(){
-  PAIRS.forEach(p=>{
-    checkH4Alert(p, analyzeH4M15(p));
+  pts.forEach(n=>{
+    const glow = 0.6 + Math.sin(n.pulse)*0.3;
+    ctx.beginPath();
+    ctx.fillStyle = n.color;
+    ctx.globalAlpha = glow;
+    ctx.arc(n.x*w, n.y*h, n.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
   });
 }
 
-function loadAlertConfig(){
-  try{
-    const toggle = document.getElementById('alertToggle');
-    toggle.checked = localStorage.getItem('kiseiban:alertEnabled') === '1';
-  }catch(e){ /* best effort */ }
+function drawEquityCurve(){
+  const cv = document.getElementById('equitycurve');
+  const c = hidpiCanvas(cv); if(!c) return;
+  const {ctx,w,h} = c;
+  ctx.clearRect(0,0,w,h);
+  const data = state.equityHistory;
+  if(data.length<2) return;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = (max-min)||1;
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x = i/(data.length-1)*w;
+    const y = h - ((v-min)/range)*h*0.88 - h*0.04;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = '#28ffb0'; ctx.lineWidth = 1.8; ctx.stroke();
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,'#28ffb040'); grad.addColorStop(1,'#28ffb000');
+  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
 }
 
-document.getElementById('alertToggle').addEventListener('change', (e)=>{
-  try{ localStorage.setItem('kiseiban:alertEnabled', e.target.checked ? '1' : '0'); }catch(err){ /* best effort */ }
-  if(e.target.checked && 'Notification' in window && Notification.permission==='default'){
-    Notification.requestPermission();
+function drawVolBars(id, data, color){
+  const cv = document.getElementById(id);
+  const c = hidpiCanvas(cv); if(!c) return;
+  const {ctx,w,h} = c;
+  ctx.clearRect(0,0,w,h);
+  if(data.length===0) return;
+  const max = Math.max(...data,1);
+  const bw = w/data.length;
+  data.forEach((v,i)=>{
+    const bh = (v/max)*h*0.9;
+    ctx.fillStyle = color;
+    ctx.fillRect(i*bw+1, h-bh, bw-2, bh);
+  });
+}
+
+function renderLogs(){
+  const el = document.getElementById('logBody');
+  el.innerHTML = state.logs.slice(-40).map(l=>{
+    return `<div class="logline"><span class="t">${l.t}</span><span class="tag ${l.tag}">${l.tag}</span><span class="msg">${l.msg}</span> <span class="px">$${fmt(l.price,2)}</span> <span style="color:${l.pnl>=0?'#28ffb0':'#ff2e88'}">${l.pnl>=0?'+':''}${fmt(l.pnl,2)}</span></div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderTrades(){
+  const body = document.getElementById('tradesBody');
+  body.innerHTML = tradesTableRows.map(t=>{
+    return `<tr>
+      <td>$${fmt(t.price,2)}</td>
+      <td class="${t.winPct>=50?'up':'dn'}">${fmt(t.winPct,1)}%</td>
+      <td class="${t.pnl>=0?'up':'dn'}">${t.pnl>=0?'+':''}${fmt(t.pnl,2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderHeaderAndCards(){
+  document.getElementById('hPrice').textContent = '$'+fmt(state.price,2);
+  document.getElementById('hPnl').textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+  document.getElementById('hTrades').textContent = state.trades+'/'+state.totalTrades;
+  const winPct = state.trades? (state.wins/state.trades*100):100;
+  document.getElementById('hWin').textContent = fmt(winPct,1)+'%';
+  document.getElementById('hTime').textContent = new Date().toTimeString().slice(0,8);
+
+  document.getElementById('eqVal').textContent = fmtMoney(state.equity);
+  const growth = ((state.equity-1.52)/1.52*100);
+  document.getElementById('eqDelta').textContent = '▲ '+fmt(growth,1)+'% · '+state.trades+' trades';
+  document.getElementById('eqTrades').textContent = state.trades;
+  document.getElementById('eqWin').textContent = fmt(winPct,1)+'%';
+  document.getElementById('eqAvg').textContent = fmtMoney(state.trades? state.pnl/state.trades : 0);
+
+  document.getElementById('cPrice').textContent = '$'+fmt(state.price,2);
+  document.getElementById('book').innerHTML = state.candles.slice(-4).reverse().map(c=>{
+    return `${fmt(c.close,2)} <b>${(c.close-c.open>=0?'▲':'▼')}</b>`;
+  }).join('<br>');
+
+  document.getElementById('streakN').textContent = '+'+state.streak;
+  document.getElementById('streakBest').textContent = state.bestStreak;
+  document.getElementById('streakGain').textContent = '+'+fmt(growth,0)+'%';
+  document.getElementById('streakDur').textContent = new Date().toTimeString().slice(0,5);
+
+  document.getElementById('mfPnl').textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+
+  document.getElementById('curveVal').textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+  document.getElementById('curveT').textContent = state.trades;
+  document.getElementById('curveW').textContent = fmt(winPct,1)+'%';
+
+  if(state.sellVols.length) document.getElementById('volPinkLabel').textContent = fmt(state.sellVols.reduce((a,b)=>a+b,0),0);
+  if(state.buyVols.length) document.getElementById('volGreenLabel').textContent = fmt(state.buyVols.reduce((a,b)=>a+b,0),0);
+}
+
+function renderAll(){
+  renderHeaderAndCards();
+  drawSpark(document.getElementById('eqSpark'), state.equityHistory.slice(-30), '#ff2e88');
+  drawCandles();
+  drawStreakBar();
+  drawMicrofish();
+  drawEquityCurve();
+  drawVolBars('volPink', state.sellVols, '#ff2e88aa');
+  drawVolBars('volGreen', state.buyVols, '#28ffb0aa');
+  renderTrades();
+  renderLogs();
+}
+
+// ---------- Main loop ----------
+initNodes();
+
+if(LIVE_MODE){
+  document.querySelectorAll('.sub').forEach(el=> el.innerHTML = '<span class="live-dot"></span>LIVE · MT5');
+  document.querySelectorAll('.price-tag').forEach(el=> el.textContent = CONFIG.SYMBOL);
+  document.querySelector('.footer-note').textContent = 'GRAVIA DASHBOARD — MetaApi 経由の実データ(口座: ' + CONFIG.METAAPI_ACCOUNT_ID.slice(0,8) + '…)';
+  liveTick();
+  setInterval(liveTick, CONFIG.POLL_MS);
+} else {
+  for(let i=0;i<26;i++) simulateTick(); // seed initial data so it doesn't start empty
+  function tick(){
+    simulateTick();
+    driftNodes();
+    renderAll();
   }
-});
-
-document.getElementById('manualCheckDismiss').addEventListener('click', ()=>{
-  document.getElementById('manualCheckPrompt').style.display = 'none';
-  if(state.manualCheckTimer) clearTimeout(state.manualCheckTimer);
-});
-
-setInterval(updateH4Countdown, 1000);
-updateH4Countdown();
-
-function render(){
-  const candles1m = state.candlesAll[state.symbol];
-  const candles = resample(candles1m, parseInt(state.interval,10));
-  const chartLoading = document.getElementById('chartLoading');
-
-  if(candles.length < 2){
-    chartLoading.style.display='block';
-    chartLoading.textContent = `データ蓄積中… ${candles1m.length}分ぶんの記録があります（この足に必要な本数まで、あと少し待ってください）`;
-  } else {
-    chartLoading.style.display='none';
-  }
-
-  const closes = candles.map(c=>c.c);
-  const times = candles.map(c=>new Date(c.t));
-  const sma9v = sma(closes,9);
-  const sma21v = sma(closes,21);
-  const ema20v = ema(closes,state.emaPeriod);
-  const rsiVals = rsi(closes,14);
-
-  const h4Result = analyzeH4M15(state.symbol);
-
-  if(closes.length){
-    renderPriceChart(times, closes, sma9v, sma21v, ema20v, h4Result);
-  }
-  renderRsiChart(times, rsiVals);
-  updateStats(closes, sma9v, sma21v, rsiVals, ema20v);
-  updateSignal(sma9v, sma21v, rsiVals, closes.length);
-  renderH4M15(h4Result);
+  tick();
+  setInterval(tick, 900);
 }
-
-async function startFeed(){
-  await loadAllCandles();
-  render();
-  poll();
-  state.pollTimer = setInterval(poll, 20000);
-}
-
-// Mobile browsers (notably iOS Safari) throttle or fully suspend setInterval/setTimeout
-// timers while the tab is backgrounded or the screen is locked, so polling silently stops
-// and gaps appear in the recorded candles. We can't prevent that, but we can catch up
-// immediately on return and be honest about the gap instead of pretending it didn't happen.
-function showBgGapNotice(gapMs){
-  const el = document.getElementById('bgGapNotice');
-  if(!el) return;
-  const minutes = Math.max(1, Math.round(gapMs/60000));
-  el.textContent = `バックグラウンドから復帰しました。この間(約${minutes}分)のレートは記録されていません(ブラウザがバックグラウンドではタイマーの実行を止めるため)。`;
-  el.style.display = 'block';
-  if(state.bgGapNoticeTimer) clearTimeout(state.bgGapNoticeTimer);
-  state.bgGapNoticeTimer = setTimeout(()=>{ el.style.display = 'none'; }, 15000);
-}
-
-document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState !== 'visible') return;
-  const gapMs = state.lastSuccessAt ? Date.now() - state.lastSuccessAt : 0;
-  if(gapMs > 90000) showBgGapNotice(gapMs);
-  if(state.pollRetryTimer){ clearTimeout(state.pollRetryTimer); state.pollRetryTimer = null; }
-  poll();
-});
-
-function labelize(times){
-  return times.map(t => t.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
-}
-
-function nearestIndex(times, targetMs){
-  let bestIdx = -1, bestDiff = Infinity;
-  times.forEach((t,i)=>{
-    const diff = Math.abs(t.getTime()-targetMs);
-    if(diff < bestDiff){ bestDiff = diff; bestIdx = i; }
-  });
-  return bestIdx;
-}
-
-function buildH4MarkerDatasets(times, closes, h4Result){
-  const datasets = [];
-  if(!h4Result || !h4Result.level) return datasets;
-
-  datasets.push({
-    label:'H4水準',
-    data: closes.map(()=>h4Result.level.price),
-    borderColor:'#c9a227',
-    borderWidth:1,
-    borderDash:[6,4],
-    pointRadius:0,
-    tension:0,
-  });
-
-  if(h4Result.breakoutTime || h4Result.pinbarTime){
-    const breakoutTime = h4Result.breakoutTime ?? h4Result.pinbarTime;
-    const idx = nearestIndex(times, breakoutTime);
-    if(idx >= 0){
-      const data = new Array(closes.length).fill(null);
-      data[idx] = closes[idx];
-      datasets.push({
-        label: h4Result.direction==='short' ? 'ブレイク(下抜け)' : 'ブレイク(上抜け)',
-        data, showLine:false,
-        pointRadius:5, pointStyle:'rectRot',
-        borderColor:'#7fb8d9', backgroundColor:'#7fb8d9',
-      });
-    }
-  }
-  if(h4Result.status==='signal' && h4Result.pinbarTime){
-    const idx = nearestIndex(times, h4Result.pinbarTime);
-    if(idx >= 0){
-      const data = new Array(closes.length).fill(null);
-      data[idx] = closes[idx];
-      const color = h4Result.direction==='long' ? '#4fae7a' : '#c0546a';
-      datasets.push({
-        label: h4Result.direction==='long' ? 'ピンバー(LONG)' : 'ピンバー(SHORT)',
-        data, showLine:false,
-        pointRadius:7, pointStyle:'triangle',
-        borderColor:color, backgroundColor:color,
-      });
-    }
-  }
-  return datasets;
-}
-
-function renderPriceChart(times, closes, sma9, sma21, ema20, h4Result){
-  const labels = labelize(times);
-  const last = closes[closes.length-1];
-  const prev = closes[closes.length-2] ?? last;
-  const chg = last-prev;
-  const pEl = document.getElementById('priceNow');
-  pEl.textContent = fmt(last, 3);
-  pEl.className = 'price ' + (chg>=0?'up':'down');
-  document.getElementById('priceChg').textContent = (chg>=0?'+':'')+fmt(chg, 3);
-  document.getElementById('priceChg').style.color = chg>=0 ? 'var(--up)' : 'var(--down)';
-
-  if(priceChart) priceChart.destroy();
-  const ctx = document.getElementById('priceChart').getContext('2d');
-  priceChart = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets:[
-      { label:'価格', data:closes, borderColor:'#e9e3d3', borderWidth:1.5, pointRadius:0, tension:0.15 },
-      { label:'SMA9', data:sma9, borderColor:'#c9a227', borderWidth:1.5, pointRadius:0, tension:0.15 },
-      { label:'SMA21', data:sma21, borderColor:'#4fae7a', borderWidth:1.5, pointRadius:0, tension:0.15 },
-      { label:`EMA${state.emaPeriod}`, data:ema20, borderColor:'#7fb8d9', borderWidth:1.5, borderDash:[3,3], pointRadius:0, tension:0.15 },
-      ...buildH4MarkerDatasets(times, closes, h4Result),
-    ]},
-    options:{
-      responsive:true,
-      interaction:{mode:'index', intersect:false},
-      plugins:{ legend:{ labels:{color:'#a79f8a', font:{size:10}} } },
-      scales:{
-        x:{ ticks:{ color:'#5a7378', maxTicksLimit:6, font:{size:9} }, grid:{color:'#1f3a3e'} },
-        y:{ ticks:{ color:'#5a7378', font:{size:9} }, grid:{color:'#1f3a3e'} }
-      }
-    }
-  });
-}
-
-function renderRsiChart(times, rsiVals){
-  const labels = labelize(times);
-  if(rsiChart) rsiChart.destroy();
-  const ctx = document.getElementById('rsiChart').getContext('2d');
-  rsiChart = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets:[
-      { label:'RSI', data:rsiVals, borderColor:'#c9a227', borderWidth:1.5, pointRadius:0, tension:0.15 },
-    ]},
-    options:{
-      responsive:true,
-      plugins:{ legend:{display:false} },
-      scales:{
-        x:{ ticks:{ color:'#5a7378', maxTicksLimit:6, font:{size:9} }, grid:{color:'#1f3a3e'} },
-        y:{ min:0, max:100, ticks:{ color:'#5a7378', font:{size:9} }, grid:{color:'#1f3a3e'} }
-      }
-    }
-  });
-}
-
-function updateStats(closes, sma9, sma21, rsiVals, ema20){
-  const lastRsi = [...rsiVals].reverse().find(v=>v!==null);
-  const lastSma9 = [...sma9].reverse().find(v=>v!==null);
-  const lastSma21 = [...sma21].reverse().find(v=>v!==null);
-  const lastEma20 = [...ema20].reverse().find(v=>v!==null);
-  document.getElementById('rsiVal').textContent = lastRsi!==undefined ? fmt(lastRsi,1) : '—';
-  document.getElementById('sma9Val').textContent = lastSma9!==undefined ? fmt(lastSma9,1) : '—';
-  document.getElementById('sma21Val').textContent = lastSma21!==undefined ? fmt(lastSma21,1) : '—';
-  document.getElementById('ema20Val').textContent = lastEma20!==undefined ? fmt(lastEma20,1) : '—';
-  document.getElementById('emaLabel').textContent = `EMA${state.emaPeriod}`;
-}
-
-function updateSignal(sma9, sma21, rsiVals, dataLen){
-  const s9 = [...sma9].reverse().find(v=>v!==null);
-  const s21 = [...sma21].reverse().find(v=>v!==null);
-  const r = [...rsiVals].reverse().find(v=>v!==null);
-  const tag = document.getElementById('signalTag');
-  const why = document.getElementById('signalWhy');
-  if(!dataLen || s9===undefined || s21===undefined || r===undefined){
-    tag.className='tag wait'; tag.textContent='様子見';
-    why.textContent='指標を計算するためのデータがまだ足りません。このページを開いたままにしておくと、記録が溜まって指標が表示されるようになります。';
-    return;
-  }
-  if(s9>s21 && r>50 && r<70){
-    tag.className='tag high'; tag.textContent='HIGH寄り(参考)';
-    why.textContent=`短期線が長期線を上回り、RSI(${fmt(r,1)})も買われすぎ手前です。上昇の勢いが続きやすい局面という「傾向」を示しているに過ぎません。`;
-  } else if(s9<s21 && r<50 && r>30){
-    tag.className='tag low'; tag.textContent='LOW寄り(参考)';
-    why.textContent=`短期線が長期線を下回り、RSI(${fmt(r,1)})も売られすぎ手前です。下落の勢いが続きやすい局面という「傾向」を示しているに過ぎません。`;
-  } else {
-    tag.className='tag wait'; tag.textContent='様子見';
-    why.textContent=`指標が一致していないか、RSI(${fmt(r,1)})が中立圏(または過熱圏)です。判断材料が不十分な局面です。`;
-  }
-}
-
-// --- Trade journal (personal storage) ---
-async function loadTrades(){
-  try{
-    const raw = localStorage.getItem('kiseiban:trades:'+state.symbol);
-    state.trades = raw ? JSON.parse(raw) : [];
-  }catch(e){
-    state.trades = [];
-  }
-  renderJournal();
-}
-
-async function saveTrades(){
-  try{
-    localStorage.setItem('kiseiban:trades:'+state.symbol, JSON.stringify(state.trades));
-  }catch(e){ /* best effort — storage may be full or unavailable */ }
-}
-
-function addTrade(result){
-  const amount = parseFloat(document.getElementById('amountInput').value) || null;
-  const pipsRaw = parseFloat(document.getElementById('pipsInput').value);
-  const rRaw = parseFloat(document.getElementById('rInput').value);
-  state.trades.push({
-    result,
-    amount,
-    pips: isNaN(pipsRaw) ? null : pipsRaw,
-    r: isNaN(rRaw) ? null : rRaw,
-    t: Date.now()
-  });
-  saveTrades();
-  renderJournal();
-  document.getElementById('pipsInput').value = '';
-  document.getElementById('rInput').value = '';
-}
-
-function renderJournal(){
-  const trades = state.trades;
-  document.getElementById('tradeCount').textContent = trades.length ? `(${trades.length}件)` : '';
-  document.getElementById('journalEmpty').style.display = trades.length ? 'none' : 'block';
-  document.getElementById('histTable').style.display = trades.length ? 'table' : 'none';
-
-  const body = document.getElementById('histBody');
-  body.innerHTML = '';
-  trades.slice().reverse().slice(0,30).forEach((tr, idx) => {
-    const n = trades.length - idx;
-    const tr_el = document.createElement('tr');
-    const pipsTxt = tr.pips!=null ? (tr.pips>0?'+':'')+fmt(tr.pips,1) : '—';
-    const rTxt = tr.r!=null ? (tr.r>0?'+':'')+fmt(tr.r,2) : '—';
-    tr_el.innerHTML = `<td>${n}</td><td class="${tr.result==='win'?'win':'loss'}">${tr.result==='win'?'勝ち':'負け'}</td><td>${tr.amount ? '¥'+tr.amount.toLocaleString() : '—'}</td><td>${pipsTxt}</td><td>${rTxt}</td><td>${new Date(tr.t).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>`;
-    body.appendChild(tr_el);
-  });
-
-  const pipsTrades = trades.filter(tr=>tr.pips!=null);
-  const rTrades = trades.filter(tr=>tr.r!=null);
-  const pipsGrid = document.getElementById('pipsStatGrid');
-  if(pipsTrades.length || rTrades.length){
-    pipsGrid.style.display = 'grid';
-    const pipsSum = pipsTrades.reduce((s,tr)=>s+tr.pips,0);
-    const rSum = rTrades.reduce((s,tr)=>s+tr.r,0);
-    document.getElementById('pipsTotal').textContent = pipsTrades.length ? (pipsSum>0?'+':'')+fmt(pipsSum,1) : '—';
-    document.getElementById('pipsAvg').textContent = pipsTrades.length ? (pipsSum/pipsTrades.length>0?'+':'')+fmt(pipsSum/pipsTrades.length,1) : '—';
-    document.getElementById('rAvg').textContent = rTrades.length ? (rSum/rTrades.length>0?'+':'')+fmt(rSum/rTrades.length,2) : '—';
-    document.getElementById('rExpectancy').textContent = rTrades.length ? (rSum/rTrades.length>0?'+':'')+fmt(rSum/rTrades.length,2) : '—';
-  } else {
-    pipsGrid.style.display = 'none';
-  }
-
-  // cumulative win rate
-  const cum = [];
-  let wins=0;
-  trades.forEach((tr,i)=>{
-    if(tr.result==='win') wins++;
-    cum.push(wins/(i+1)*100);
-  });
-
-  if(winrateChart) winrateChart.destroy();
-  const ctx = document.getElementById('winrateChart').getContext('2d');
-  winrateChart = new Chart(ctx, {
-    type:'line',
-    data:{
-      labels: cum.map((_,i)=>i+1),
-      datasets:[
-        { label:'累積勝率(%)', data:cum, borderColor:'#c9a227', borderWidth:2, pointRadius:0, tension:0.1 },
-        { label:'損益分岐(54.1%)', data:cum.map(()=>54.1), borderColor:'#5a7378', borderWidth:1, borderDash:[4,4], pointRadius:0 },
-      ]
-    },
-    options:{
-      responsive:true,
-      plugins:{ legend:{ labels:{color:'#a79f8a', font:{size:10}} } },
-      scales:{
-        x:{ title:{display:true, text:'取引回数', color:'#5a7378', font:{size:10}}, ticks:{ color:'#5a7378', font:{size:9} }, grid:{color:'#1f3a3e'} },
-        y:{ min:0, max:100, ticks:{ color:'#5a7378', font:{size:9} }, grid:{color:'#1f3a3e'} }
-      }
-    }
-  });
-}
-
-document.getElementById('btnWin').addEventListener('click', ()=>addTrade('win'));
-document.getElementById('btnLoss').addEventListener('click', ()=>addTrade('loss'));
-document.getElementById('btnReset').addEventListener('click', async ()=>{
-  if(confirm('この銘柄の記録をすべて削除しますか？')){
-    state.trades = [];
-    await saveTrades();
-    renderJournal();
-  }
-});
-
-document.getElementById('symbolSel').addEventListener('change', (e)=>{
-  state.symbol = e.target.value;
-  render();
-  loadTrades();
-  initTradingViewWidget();
-});
-
-document.querySelectorAll('button.pill[data-interval]').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('button.pill[data-interval]').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    state.interval = btn.dataset.interval;
-    render();
-  });
-});
-
-document.querySelectorAll('button.pill[data-ema]').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('button.pill[data-ema]').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    state.emaPeriod = parseInt(btn.dataset.ema,10);
-    render();
-  });
-});
-
-['pbWickMult','pbWickRatio'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', ()=>{
-    savePinbarConfig();
-    render();
-  });
-});
-
-function tickClock(){
-  document.getElementById('clock').textContent = new Date().toLocaleTimeString('ja-JP');
-}
-setInterval(tickClock, 1000);
-tickClock();
-
-loadPinbarConfig();
-loadAlertConfig();
-loadProxyConfig();
-startFeed();
-loadTrades();
-initTradingViewWidget();
+window.addEventListener('resize', renderAll);
 </script>
 </body>
 </html>

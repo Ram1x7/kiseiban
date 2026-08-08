@@ -47,5 +47,6 @@ const CONFIG = {
     // TIMEFRAME_F: '4h',
     // TIMEFRAME_E: '4h',
     // TIMEFRAME_G: '15m',
+    // TIMEFRAME_H: '4h',
   },
 };

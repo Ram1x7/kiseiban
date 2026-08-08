@@ -139,6 +139,15 @@ async function handleDashboard(reqUrl, env) {
       PINBAR_WICK_MULT: numOr(env.AUTOTRADE_PINBAR_WICK_MULT, 1.5),
       PINBAR_WICK_RATIO: numOr(env.AUTOTRADE_PINBAR_WICK_RATIO, 0.5),
       POLL_MS: numOr(env.AUTOTRADE_POLL_MS, 30000),
+      // Optional per-pattern timeframe overrides (each falls back to
+      // TIMEFRAME above if unset on this Worker). Undefined keys are
+      // dropped by JSON.stringify, so leaving a variable unset here is
+      // exactly equivalent to not setting it at all client-side.
+      TIMEFRAME_A: env.AUTOTRADE_TIMEFRAME_A || undefined,
+      TIMEFRAME_B: env.AUTOTRADE_TIMEFRAME_B || undefined,
+      TIMEFRAME_C: env.AUTOTRADE_TIMEFRAME_C || undefined,
+      TIMEFRAME_D: env.AUTOTRADE_TIMEFRAME_D || undefined,
+      TIMEFRAME_F: env.AUTOTRADE_TIMEFRAME_F || undefined,
     },
   };
 

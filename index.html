@@ -200,7 +200,7 @@
 
 <div class="panel autotrade-panel" id="autotradePanel">
   <div class="panel-title">
-    <span>自動売買(パターンA/B: EMAタッチ+ピンバー / パターンC: ICT流動性掃除+FVG+OB) — 参考実装・利益を保証しません</span>
+    <span>自動売買(複数パターンを並行判定・詳細はREADME参照) — 参考実装・利益を保証しません</span>
     <span class="badge" id="atModeBadge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">要MetaApi接続</span>
   </div>
   <div class="at-row">
@@ -867,6 +867,95 @@ function backtestICTSignals(candles, patternKey){
   return results;
 }
 
+// =========================================================
+// PATTERNS D/F — EMA trend filter + pullback + resumption. Each is
+// one-directional only, matching how the user described them: D = uptrend
+// pullback BUY only ("押し目買い", EMA50), F = downtrend pullback SELL
+// only ("戻り売り", EMA200) — unlike patterns A/B/C, these don't trade the
+// opposite direction of their own definition, and each uses its own EMA
+// period as specified.
+//
+//   1) Trend: the EMA is rising (D) or falling (F), and price is on the
+//      trend side of it
+//   2) Pullback: at least a couple of consecutive counter-trend closes
+//   3) Resumption: the latest candle closes back in the trend direction
+//      and breaks the prior candle's high (D) / low (F)
+// =========================================================
+const PATTERN_D_EMA_PERIOD = 50;
+const PATTERN_F_EMA_PERIOD = 200;
+const TREND_SLOPE_LOOKBACK = 5;   // bars back to compare EMA slope against, to confirm it's still trending
+const PULLBACK_MIN_BARS = 2;      // minimum consecutive counter-trend closes to count as a genuine pullback
+const PULLBACK_MAX_SEARCH_BARS = 8; // how far back to look for where the pullback started
+
+// Checks whether the LAST candle in `candles` is a live, actionable
+// trend-pullback-resumption entry. Also used for backtesting by calling it
+// repeatedly on growing prefixes of the series (see
+// backtestTrendPullbackSignals) — EMA is a purely causal calculation, so
+// re-slicing and recomputing gives identical values to reading the same
+// index out of one full-series computation.
+function trendPullbackSignal(candles, direction, patternKey, emaPeriod){
+  const minLen = emaPeriod + TREND_SLOPE_LOOKBACK + PULLBACK_MIN_BARS + 2;
+  if(candles.length < minLen) return null;
+  const closes = candles.map(c=>c.close);
+  const emaVals = emaSeries(closes, emaPeriod);
+  const lastIdx = candles.length-1;
+  const ema = emaVals[lastIdx];
+  const emaPast = emaVals[lastIdx-TREND_SLOPE_LOOKBACK];
+  if(ema==null || emaPast==null) return null;
+
+  if(direction==='long' && !(ema > emaPast)) return null;
+  if(direction==='short' && !(ema < emaPast)) return null;
+
+  const last = candles[lastIdx];
+  if(direction==='long' && !(last.close > ema)) return null;
+  if(direction==='short' && !(last.close < ema)) return null;
+
+  // Count consecutive counter-trend closes ending just before the last
+  // candle (the pullback itself, not including the resumption candle).
+  let pullbackBars = 0;
+  for(let i=lastIdx-1; i>lastIdx-1-PULLBACK_MAX_SEARCH_BARS && i>0; i--){
+    const down = candles[i].close < candles[i-1].close;
+    const up = candles[i].close > candles[i-1].close;
+    if(direction==='long' && down) pullbackBars++;
+    else if(direction==='short' && up) pullbackBars++;
+    else break;
+  }
+  if(pullbackBars < PULLBACK_MIN_BARS) return null;
+
+  const prev = candles[lastIdx-1];
+  const confirmed = direction==='long'
+    ? (last.close > last.open && last.close > prev.high)
+    : (last.close < last.open && last.close < prev.low);
+  if(!confirmed) return null;
+
+  const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
+  const tp = direction==='long' ? Math.max(...lookback.map(c=>c.high)) : Math.min(...lookback.map(c=>c.low));
+  const pullbackSlice = candles.slice(lastIdx-pullbackBars, lastIdx+1);
+  const sl = direction==='long' ? Math.min(...pullbackSlice.map(c=>c.low)) : Math.max(...pullbackSlice.map(c=>c.high));
+
+  const signalId = String(last.time || lastIdx);
+  return { direction, tp, sl, signalId, patternKey };
+}
+
+function detectPatternD(candles){ return trendPullbackSignal(candles, 'long', 'D', PATTERN_D_EMA_PERIOD); }
+function detectPatternF(candles){ return trendPullbackSignal(candles, 'short', 'F', PATTERN_F_EMA_PERIOD); }
+
+// Backtest scan: re-runs the same live check on every growing prefix of
+// the series, rather than a bespoke forward scan — the EMA/pullback check
+// above only ever looks backward from "the last candle", so this is exact.
+function backtestTrendPullbackSignals(candles, direction, patternKey, emaPeriod){
+  const minLen = emaPeriod + TREND_SLOPE_LOOKBACK + PULLBACK_MIN_BARS + 2;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = trendPullbackSignal(candles.slice(0, i+1), direction, patternKey, emaPeriod);
+    if(sig) results.push({ direction, patternKey, time: candles[i].time, index: i });
+  }
+  return results;
+}
+
+function backtestPatternD(candles){ return backtestTrendPullbackSignals(candles, 'long', 'D', PATTERN_D_EMA_PERIOD); }
+function backtestPatternF(candles){ return backtestTrendPullbackSignals(candles, 'short', 'F', PATTERN_F_EMA_PERIOD); }
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -933,6 +1022,12 @@ function patternDefs(){
     { key:'C', timeframe: AT.TIMEFRAME_C || AT.TIMEFRAME,
       detect: (candles)=>detectICTSignal(candles, 'C'),
       backtest: (candles)=>backtestICTSignals(candles, 'C') },
+    { key:'D', timeframe: AT.TIMEFRAME_D || '4h',
+      detect: detectPatternD,
+      backtest: backtestPatternD },
+    { key:'F', timeframe: AT.TIMEFRAME_F || '4h',
+      detect: detectPatternF,
+      backtest: backtestPatternF },
   ];
 }
 
@@ -1045,7 +1140,8 @@ function initAutotradeUI(){
   if(canArm){
     badge.textContent = '接続中';
     badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)'; badge.style.borderColor = 'var(--green)';
-    note.textContent = `対象: ${AT.SYMBOL} / ${AT.TIMEFRAME}足 / ロット${AT.LOT_SIZE} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
+    const tfSummary = patternDefs().map(p=>`${p.key}:${p.timeframe}`).join(' ');
+    note.textContent = `対象: ${AT.SYMBOL} / 各パターンの時間足(${tfSummary}) / ロット${AT.LOT_SIZE} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
   } else if(!LIVE_MODE){
     note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。自動売買はLIVE接続時のみ有効です。';
   } else {

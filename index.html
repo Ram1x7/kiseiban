@@ -956,6 +956,81 @@ function backtestTrendPullbackSignals(candles, direction, patternKey, emaPeriod)
 function backtestPatternD(candles){ return backtestTrendPullbackSignals(candles, 'long', 'D', PATTERN_D_EMA_PERIOD); }
 function backtestPatternF(candles){ return backtestTrendPullbackSignals(candles, 'short', 'F', PATTERN_F_EMA_PERIOD); }
 
+// =========================================================
+// PATTERN E — Dow Theory trend confirmation + horizontal-line breakout.
+//   1) Swing pivots: local highs/lows confirmed once enough bars have
+//      closed on both sides of them
+//   2) Dow Theory trend: the last two confirmed swing highs are rising
+//      AND the last two confirmed swing lows are rising (uptrend) — or
+//      both falling (downtrend)
+//   3) Horizontal line: the most recent confirmed swing high (uptrend) or
+//      swing low (downtrend)
+//   4) Breakout: the latest candle's CLOSE (a real body close, not just a
+//      wick) breaks through that line
+// =========================================================
+const DOW_PIVOT_WING = 6; // bars required on each side of a candle to confirm it as a swing pivot
+
+// Finds every CONFIRMED swing pivot up to and including `uptoIdx` — a
+// pivot at index i needs `wing` bars closed on both sides of it, so only
+// pivots at i <= uptoIdx-wing can be confirmed from data through uptoIdx.
+function findSwingPivots(candles, uptoIdx, wing){
+  const highs = [], lows = [];
+  for(let i=wing; i<=uptoIdx-wing; i++){
+    let isHigh = true, isLow = true;
+    for(let k=1; k<=wing; k++){
+      if(candles[i-k].high > candles[i].high || candles[i+k].high > candles[i].high) isHigh = false;
+      if(candles[i-k].low < candles[i].low || candles[i+k].low < candles[i].low) isLow = false;
+    }
+    if(isHigh) highs.push({ idx:i, price: candles[i].high });
+    if(isLow) lows.push({ idx:i, price: candles[i].low });
+  }
+  return { highs, lows };
+}
+
+// Checks whether the LAST candle in `candles` is a live, actionable Dow
+// Theory breakout entry right now. Also used for backtesting by calling it
+// repeatedly on growing prefixes of the series (pivots are confirmed from
+// a fixed local neighbor window, so re-slicing gives identical results to
+// reading the same index out of one full-series computation).
+function detectPatternE(candles){
+  const lastIdx = candles.length-1;
+  const minLen = DOW_PIVOT_WING*2 + 10;
+  if(candles.length < minLen) return null;
+
+  // Confirm pivots using data through the second-to-last candle, so the
+  // breakout candle itself never counts as part of the line it's breaking.
+  const { highs, lows } = findSwingPivots(candles, lastIdx-1, DOW_PIVOT_WING);
+  if(highs.length < 2 || lows.length < 2) return null;
+
+  const lastHigh = highs[highs.length-1], prevHigh = highs[highs.length-2];
+  const lastLow = lows[lows.length-1], prevLow = lows[lows.length-2];
+  const uptrend = lastHigh.price > prevHigh.price && lastLow.price > prevLow.price;
+  const downtrend = lastHigh.price < prevHigh.price && lastLow.price < prevLow.price;
+
+  const last = candles[lastIdx];
+  const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
+
+  if(uptrend && last.close > lastHigh.price){
+    const tp = Math.max(...lookback.map(c=>c.high));
+    return { direction:'long', tp, sl: lastLow.price, signalId: String(last.time || lastIdx), patternKey:'E' };
+  }
+  if(downtrend && last.close < lastLow.price){
+    const tp = Math.min(...lookback.map(c=>c.low));
+    return { direction:'short', tp, sl: lastHigh.price, signalId: String(last.time || lastIdx), patternKey:'E' };
+  }
+  return null;
+}
+
+function backtestPatternE(candles){
+  const minLen = DOW_PIVOT_WING*2 + 10;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternE(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'E', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -1028,6 +1103,9 @@ function patternDefs(){
     { key:'F', timeframe: AT.TIMEFRAME_F || '4h',
       detect: detectPatternF,
       backtest: backtestPatternF },
+    { key:'E', timeframe: AT.TIMEFRAME_E || AT.TIMEFRAME,
+      detect: detectPatternE,
+      backtest: backtestPatternE },
   ];
 }
 

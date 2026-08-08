@@ -324,8 +324,9 @@
 if(typeof CONFIG === 'undefined'){
   // config.js が存在しない(未設定、またはGitHub Pages上でシークレットが
   // 意図的に配信されていない)場合の安全なフォールバック。
-  window.CONFIG = { METAAPI_TOKEN:'', METAAPI_ACCOUNT_ID:'', METAAPI_REGION:'new-york', SYMBOL:'BTCUSD', POLL_MS:5000 };
+  window.CONFIG = { METAAPI_TOKEN:'', METAAPI_ACCOUNT_ID:'', METAAPI_REGION:'new-york', SYMBOL:'BTCUSD', POLL_MS:5000, WORKER_PROXY_URL:'' };
 }
+if(CONFIG.WORKER_PROXY_URL === undefined) CONFIG.WORKER_PROXY_URL = '';
 if(!CONFIG.AUTOTRADE){
   // 古いconfig.js(自動売買追加前)を使っている場合の安全なフォールバック。
   // ENABLEDがfalseなので、これだけでは絶対に発注されない。
@@ -451,10 +452,18 @@ function pushLog(win, price, pnl){
 let liveInitialEquity = null;
 let liveKnownDealIds = new Set();
 
+function proxiedUrl(url){
+  // MetaApi's trading REST API does not support direct browser CORS access.
+  // If a Worker proxy URL is configured, route every call through it (server
+  // side, no CORS restriction); otherwise fall back to a direct call in case
+  // a given deployment happens to work without one.
+  return CONFIG.WORKER_PROXY_URL ? `${CONFIG.WORKER_PROXY_URL}?url=${encodeURIComponent(url)}` : url;
+}
+
 async function metaApiFetch(url){
   let res;
   try{
-    res = await fetch(url, { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
+    res = await fetch(proxiedUrl(url), { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
   }catch(networkErr){
     // fetch() itself failed (DNS/CORS/connection-level) before any HTTP response
     // was received. Browsers give almost no detail here, so at least surface the
@@ -652,7 +661,7 @@ async function placeOrder(direction, tp, sl){
     stopLoss: sl,
     comment: 'gravia-auto',
   };
-  const res = await fetch(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/trade`, {
+  const res = await fetch(proxiedUrl(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/trade`), {
     method: 'POST',
     headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

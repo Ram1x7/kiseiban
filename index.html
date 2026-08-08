@@ -200,7 +200,7 @@
 
 <div class="panel autotrade-panel" id="autotradePanel">
   <div class="panel-title">
-    <span>自動売買(USD/JPY・H4足 EMAタッチ+ピンバー) — 参考実装・利益を保証しません</span>
+    <span>自動売買(パターンA/B: EMAタッチ+ピンバー / パターンC: ICT流動性掃除+FVG+OB) — 参考実装・利益を保証しません</span>
     <span class="badge" id="atModeBadge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">要MetaApi接続</span>
   </div>
   <div class="at-row">
@@ -719,6 +719,154 @@ function backtestSignals(candles, period, patternKey){
   return results;
 }
 
+// =========================================================
+// PATTERN C — ICT-style liquidity sweep + Fair Value Gap + Order Block
+// confluence ("Unicorn Model" style reference implementation). Independent
+// of patterns A/B above; a separate detection path that can also trigger
+// an entry. Does not guarantee profit — same disclaimers as patterns A/B.
+//
+//   1) Liquidity sweep: price briefly breaks a recent swing high/low
+//      (stop hunt) and closes back inside it
+//   2) Displacement: within a few bars after the sweep, a 3-candle Fair
+//      Value Gap (imbalance) forms in the reversal direction
+//   3) Order Block: the last opposite-coloured candle before that
+//      displacement leg
+//   4) Entry: price pulls back into the zone where the FVG and Order
+//      Block overlap ("unicorn" confluence), on a confirming candle
+// =========================================================
+const ICT_SWING_LOOKBACK = 15;        // bars used to define the swing level that gets swept
+const ICT_DISPLACEMENT_MAX_BARS = 6;  // how many bars after the sweep to look for a displacement FVG
+const ICT_OB_LOOKBACK = 5;            // how many bars back from the FVG to look for the order block candle
+const ICT_MAX_ZONE_AGE_BARS = 30;     // how far back a sweep can be and still count as a "live" zone
+
+function swingExtreme(candles, idx, lookback, type){
+  const from = Math.max(0, idx-lookback);
+  const slice = candles.slice(from, idx);
+  if(slice.length === 0) return null;
+  return type === 'low' ? Math.min(...slice.map(c=>c.low)) : Math.max(...slice.map(c=>c.high));
+}
+
+// A liquidity-sweep event at exactly `idx`: price briefly breaks the prior
+// swing extreme (stop hunt) and closes back inside it.
+function isLiquiditySweep(candles, idx, direction){
+  const c = candles[idx];
+  const extreme = swingExtreme(candles, idx, ICT_SWING_LOOKBACK, direction==='long' ? 'low' : 'high');
+  if(extreme == null) return false;
+  if(direction === 'long') return c.low < extreme && c.close > extreme;
+  return c.high > extreme && c.close < extreme;
+}
+
+// 3-candle Fair Value Gap: the imbalance a displacement candle leaves
+// behind, where candle[j-1] and candle[j+1] don't overlap.
+function findFVG(candles, fromIdx, toIdx, direction){
+  for(let j=fromIdx; j<=toIdx && j+1<candles.length; j++){
+    if(j-1 < 0) continue;
+    const prev = candles[j-1], next = candles[j+1];
+    if(direction === 'long' && next.low > prev.high){
+      return { j, zoneLow: prev.high, zoneHigh: next.low };
+    }
+    if(direction === 'short' && next.high < prev.low){
+      return { j, zoneLow: next.high, zoneHigh: prev.low };
+    }
+  }
+  return null;
+}
+
+// Order block: the last opposite-coloured candle before the displacement
+// leg that created the FVG (searching backward a limited number of bars).
+function findOrderBlock(candles, beforeIdx, direction, lookback){
+  for(let i=beforeIdx; i>=Math.max(0, beforeIdx-lookback); i--){
+    const c = candles[i];
+    if(direction === 'long' && c.close < c.open) return { idx:i, low:c.low, high:c.high };
+    if(direction === 'short' && c.close > c.open) return { idx:i, low:c.low, high:c.high };
+  }
+  return null;
+}
+
+// Given a confirmed sweep at sweepIdx, finds the FVG+OrderBlock confluence
+// zone it leads to. Returns the overlap zone plus the earliest index a
+// pullback entry becomes valid from, or null if no FVG/OB (or no overlap
+// between them) forms.
+function ictSetupAfterSweep(candles, sweepIdx, direction){
+  const fvg = findFVG(candles, sweepIdx+1, sweepIdx+ICT_DISPLACEMENT_MAX_BARS, direction);
+  if(!fvg) return null;
+  const ob = findOrderBlock(candles, fvg.j-1, direction, ICT_OB_LOOKBACK);
+  if(!ob) return null;
+  const zoneLow = Math.max(fvg.zoneLow, ob.low);
+  const zoneHigh = Math.min(fvg.zoneHigh, ob.high);
+  if(zoneLow >= zoneHigh) return null; // FVG and order block never overlap — no "unicorn" confluence
+  // candles[fvg.j+1] is the FVG's own boundary candle (its low/high *is*
+  // zoneHigh/zoneLow by definition), so it always trivially "touches" the
+  // zone — checking it as a pullback entry would fire immediately on the
+  // FVG forming instead of waiting for an actual pullback. Start one candle
+  // later so a genuine pullback is required.
+  return { zoneLow, zoneHigh, readyFromIdx: fvg.j+2, sweepIdx };
+}
+
+// Live check: is the single most-recently-closed candle an actionable ICT
+// entry right now? Mirrors detectSignal()'s "only the latest candle counts"
+// design so it can be called alongside patterns A/B in autotradeTick().
+function detectICTSignal(candles, patternKey){
+  const minLen = ICT_SWING_LOOKBACK+ICT_DISPLACEMENT_MAX_BARS+ICT_OB_LOOKBACK+3;
+  if(candles.length < minLen) return null;
+  const lastIdx = candles.length-1;
+  const earliestSweep = Math.max(ICT_SWING_LOOKBACK, lastIdx-ICT_MAX_ZONE_AGE_BARS);
+
+  for(const direction of ['long','short']){
+    for(let sweepIdx=lastIdx-1; sweepIdx>=earliestSweep; sweepIdx--){
+      if(!isLiquiditySweep(candles, sweepIdx, direction)) continue;
+      const setup = ictSetupAfterSweep(candles, sweepIdx, direction);
+      if(!setup || setup.readyFromIdx > lastIdx) continue;
+      const c = candles[lastIdx];
+      const touches = c.low <= setup.zoneHigh && c.high >= setup.zoneLow;
+      const confirmed = direction === 'long' ? c.close >= c.open : c.close <= c.open;
+      if(touches && confirmed){
+        const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
+        const tp = direction==='long' ? Math.max(...lookback.map(x=>x.high)) : Math.min(...lookback.map(x=>x.low));
+        const sl = direction==='long' ? candles[setup.sweepIdx].low : candles[setup.sweepIdx].high;
+        const signalId = String(candles[lastIdx].time || lastIdx);
+        return { direction, tp, sl, signalId, patternKey };
+      }
+    }
+  }
+  return null;
+}
+
+// Historical scan version of detectICTSignal(), for the backtest button —
+// walks the whole series finding every independent sweep -> FVG/OB ->
+// pullback-entry occurrence, per direction.
+function backtestICTSignals(candles, patternKey){
+  const minLen = ICT_SWING_LOOKBACK+ICT_DISPLACEMENT_MAX_BARS+ICT_OB_LOOKBACK+3;
+  if(candles.length < minLen) return [];
+  const results = [];
+  for(const direction of ['long','short']){
+    let from = ICT_SWING_LOOKBACK;
+    while(from < candles.length){
+      let sweepIdx = -1;
+      for(let i=from;i<candles.length;i++){
+        if(isLiquiditySweep(candles, i, direction)){ sweepIdx = i; break; }
+      }
+      if(sweepIdx === -1) break;
+
+      const setup = ictSetupAfterSweep(candles, sweepIdx, direction);
+      if(!setup){ from = sweepIdx+1; continue; }
+
+      let touchIdx = -1;
+      for(let i=setup.readyFromIdx; i<candles.length; i++){
+        const c = candles[i];
+        const touches = c.low <= setup.zoneHigh && c.high >= setup.zoneLow;
+        const confirmed = direction === 'long' ? c.close >= c.open : c.close <= c.open;
+        if(touches && confirmed){ touchIdx = i; break; }
+      }
+      if(touchIdx === -1){ from = sweepIdx+1; continue; }
+
+      results.push({ direction, patternKey, time: candles[touchIdx].time, index: touchIdx });
+      from = touchIdx + 1;
+    }
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -796,7 +944,7 @@ async function autotradeTick(){
       return;
     }
 
-    const signal = detectSignal(candles, 10, 'A') || detectSignal(candles, 20, 'B');
+    const signal = detectSignal(candles, 10, 'A') || detectSignal(candles, 20, 'B') || detectICTSignal(candles, 'C');
     if(!signal){
       atState.lastSignalText = `様子見 (${new Date().toTimeString().slice(0,8)})`;
       const now = Date.now();
@@ -893,7 +1041,8 @@ async function runBacktest(){
 
     const a = backtestSignals(candles, 10, 'A');
     const b = backtestSignals(candles, 20, 'B');
-    const all = [...a, ...b];
+    const c = backtestICTSignals(candles, 'C');
+    const all = [...a, ...b, ...c];
     const longCount = all.filter(s=>s.direction==='long').length;
     const shortCount = all.filter(s=>s.direction==='short').length;
     const from = new Date(candles[0].time);
@@ -904,7 +1053,7 @@ async function runBacktest(){
     resultEl.textContent =
       `対象: ${AT.SYMBOL} / ${AT.TIMEFRAME}足\n` +
       `期間: ${from.toLocaleString('ja-JP')} 〜 ${to.toLocaleString('ja-JP')}(約${days.toFixed(1)}日・${candles.length}本)\n` +
-      `シグナル合計: ${all.length}回(パターンA: ${a.length} / パターンB: ${b.length} / LONG: ${longCount} / SHORT: ${shortCount})\n` +
+      `シグナル合計: ${all.length}回(パターンA: ${a.length} / パターンB: ${b.length} / パターンC(ICT): ${c.length} / LONG: ${longCount} / SHORT: ${shortCount})\n` +
       `1日あたり目安: 約${fmt(perDay,2)}回\n` +
       `※過去の出現回数の集計であり、将来の頻度・利益を保証するものではありません。`;
     atLog('SIG', `過去シグナル頻度を確認: 合計${all.length}回(約${days.toFixed(1)}日間・1日あたり約${fmt(perDay,2)}回)`);

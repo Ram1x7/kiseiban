@@ -452,9 +452,22 @@ let liveInitialEquity = null;
 let liveKnownDealIds = new Set();
 
 async function metaApiFetch(url){
-  const res = await fetch(url, { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
-  if(!res.ok) throw new Error(url + ' -> HTTP ' + res.status);
-  return res.json();
+  let res;
+  try{
+    res = await fetch(url, { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
+  }catch(networkErr){
+    // fetch() itself failed (DNS/CORS/connection-level) before any HTTP response
+    // was received. Browsers give almost no detail here, so at least surface the
+    // URL and error name to narrow down which host/call is failing.
+    throw new Error(`network error calling ${url} — ${networkErr.name}: ${networkErr.message}`);
+  }
+  const text = await res.text();
+  if(!res.ok) throw new Error(`${url} -> HTTP ${res.status}: ${text.slice(0,200)}`);
+  try{
+    return JSON.parse(text);
+  }catch(parseErr){
+    throw new Error(`${url} -> JSONとして解釈できません: ${text.slice(0,200)}`);
+  }
 }
 
 async function fetchLiveData(){

@@ -541,8 +541,12 @@ function mapLiveDataToState(data){
     state.candles = candles.slice(-26).map(c=>({open:c.open, high:c.high, low:c.low, close:c.close}));
   }
 
-  // closed trades (deals with a realized profit, excluding balance ops etc.)
-  const closed = (deals||[]).filter(d => (d.entryType === 'DEAL_ENTRY_OUT' || d.entryType === 'DEAL_ENTRY_OUT_BY') && typeof d.profit === 'number');
+  // closed trades placed by this bot only (comment === 'gravia-auto', set
+  // in placeOrder()). Manually-placed trades on the same account are
+  // intentionally excluded from win rate / PnL / the trade log, since
+  // those stats are meant to reflect the automated strategies' own
+  // performance, not the account's overall activity.
+  const closed = (deals||[]).filter(d => (d.entryType === 'DEAL_ENTRY_OUT' || d.entryType === 'DEAL_ENTRY_OUT_BY') && typeof d.profit === 'number' && d.comment === 'gravia-auto');
   closed.sort((a,b)=> new Date(a.time) - new Date(b.time));
 
   state.trades = closed.length;

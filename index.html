@@ -461,21 +461,23 @@ function proxiedUrl(url){
 }
 
 async function metaApiFetch(url){
+  const fetchUrl = proxiedUrl(url);
   let res;
   try{
-    res = await fetch(proxiedUrl(url), { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
+    res = await fetch(fetchUrl, { headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Accept': 'application/json' } });
   }catch(networkErr){
     // fetch() itself failed (DNS/CORS/connection-level) before any HTTP response
     // was received. Browsers give almost no detail here, so at least surface the
-    // URL and error name to narrow down which host/call is failing.
-    throw new Error(`network error calling ${url} — ${networkErr.name}: ${networkErr.message}`);
+    // URL actually fetched (proxied or not) and error name to narrow down which
+    // host/call is failing.
+    throw new Error(`network error calling ${fetchUrl} — ${networkErr.name}: ${networkErr.message}`);
   }
   const text = await res.text();
-  if(!res.ok) throw new Error(`${url} -> HTTP ${res.status}: ${text.slice(0,200)}`);
+  if(!res.ok) throw new Error(`${fetchUrl} -> HTTP ${res.status}: ${text.slice(0,200)}`);
   try{
     return JSON.parse(text);
   }catch(parseErr){
-    throw new Error(`${url} -> JSONとして解釈できません: ${text.slice(0,200)}`);
+    throw new Error(`${fetchUrl} -> JSONとして解釈できません: ${text.slice(0,200)}`);
   }
 }
 
@@ -661,11 +663,17 @@ async function placeOrder(direction, tp, sl){
     stopLoss: sl,
     comment: 'gravia-auto',
   };
-  const res = await fetch(proxiedUrl(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/trade`), {
-    method: 'POST',
-    headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const fetchUrl = proxiedUrl(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/trade`);
+  let res;
+  try{
+    res = await fetch(fetchUrl, {
+      method: 'POST',
+      headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }catch(networkErr){
+    throw new Error(`network error calling ${fetchUrl} — ${networkErr.name}: ${networkErr.message}`);
+  }
   const text = await res.text();
   let data;
   try{ data = JSON.parse(text); }catch(e){ data = { raw: text.slice(0,200) }; }

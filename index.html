@@ -170,6 +170,13 @@
   .at-stat .k{ color:var(--txt-dim); font-size:9px; letter-spacing:1px; }
   .at-stat .v{ color:#fff; font-size:13px; font-weight:700; }
   .at-note{ margin-top:8px; color:var(--txt-dim); font-size:9px; line-height:1.6; }
+  .at-btn{
+    background:var(--panel); border:1px solid var(--pink-dim); color:var(--pink);
+    font-size:11px; padding:6px 12px; border-radius:6px; cursor:pointer; letter-spacing:0.5px;
+  }
+  .at-btn:disabled{ opacity:0.4; cursor:not-allowed; }
+  .at-btn:hover:not(:disabled){ border-color:var(--pink); }
+  .at-backtest-result{ margin-top:8px; color:var(--txt); font-size:11px; line-height:1.7; white-space:pre-wrap; }
 </style>
 </head>
 <body>
@@ -204,8 +211,10 @@
     <div class="at-stat"><span class="k">本日の損益</span><span class="v" id="atDailyPnl">$0.00</span></div>
     <div class="at-stat"><span class="k">保有ポジション</span><span class="v" id="atOpenPositions">0 / 1</span></div>
     <div class="at-stat"><span class="k">直近判定</span><span class="v" id="atLastSignal">—</span></div>
+    <button class="at-btn" id="atBacktestBtn" disabled>過去のシグナル頻度を確認</button>
   </div>
   <div class="at-note" id="atNote">MetaApiに接続され、config.jsで AUTOTRADE.ENABLED が true の場合のみ有効化されます。デモ口座での動作確認を強く推奨します。</div>
+  <div class="at-backtest-result" id="atBacktestResult"></div>
 </div>
 
 <div class="grid-row1">
@@ -669,6 +678,47 @@ function detectSignal(candles, period, patternKey){
   return { direction, tp, sl, signalId, patternKey };
 }
 
+// Walks the full historical series looking for every independent
+// cross -> touch+pinbar occurrence (unlike detectSignal(), which only
+// checks whether the very latest candle is an actionable entry). Used for
+// the "過去のシグナル頻度を確認" backtest button — a reference count only,
+// not a profitability backtest (no simulated fills/slippage).
+function backtestSignals(candles, period, patternKey){
+  if(candles.length < period+5) return [];
+  const closes = candles.map(c=>c.close);
+  const emaVals = emaSeries(closes, period);
+  const results = [];
+  let from = period;
+  while(from < candles.length){
+    let crossIdx = -1, direction = null;
+    for(let i=from;i<candles.length;i++){
+      if(emaVals[i-1]==null || emaVals[i]==null) continue;
+      if(closes[i-1] <= emaVals[i-1] && closes[i] > emaVals[i]){ crossIdx = i; direction = 'long'; break; }
+      if(closes[i-1] >= emaVals[i-1] && closes[i] < emaVals[i]){ crossIdx = i; direction = 'short'; break; }
+    }
+    if(crossIdx === -1) break;
+
+    let touchIdx = -1;
+    for(let i=crossIdx+1;i<candles.length;i++){
+      const c = candles[i], e = emaVals[i];
+      if(e == null) continue;
+      const touches = c.low <= e && c.high >= e;
+      if(touches && isPinbar(c, direction)){ touchIdx = i; break; }
+    }
+    if(touchIdx === -1){
+      // This cross never completed into a touch+pinbar before the series
+      // ended (or before trend reversed again) — move on and keep looking
+      // for the next cross, rather than giving up on the whole scan.
+      from = crossIdx + 1;
+      continue;
+    }
+
+    results.push({ direction, patternKey, time: candles[touchIdx].time, index: touchIdx });
+    from = touchIdx + 1;
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -816,7 +866,54 @@ function initAutotradeUI(){
     atLog('SIG', `自動売買を${atState.enabled?'ON':'OFF'}にしました。`);
     updateAutotradeUI();
   });
+
+  // Backtest button only needs a live MetaApi connection (not AT.ENABLED) —
+  // checking past signal frequency is useful even before arming autotrade.
+  const backtestBtn = document.getElementById('atBacktestBtn');
+  backtestBtn.disabled = !LIVE_MODE;
+  backtestBtn.addEventListener('click', runBacktest);
+
   updateAutotradeUI();
+}
+
+async function runBacktest(){
+  const btn = document.getElementById('atBacktestBtn');
+  const resultEl = document.getElementById('atBacktestResult');
+  btn.disabled = true;
+  resultEl.textContent = '集計中…';
+  try{
+    const cbase = `${MARKET_DATA_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
+    const raw = await metaApiFetch(`${cbase}/historical-market-data/symbols/${AT.SYMBOL}/timeframes/${AT.TIMEFRAME}/candles?limit=1000`);
+    const candles = (raw||[]).map(c=>({ open:c.open, high:c.high, low:c.low, close:c.close, time:c.time }));
+
+    if(candles.length < 30){
+      resultEl.textContent = 'データが不足しているため集計できませんでした。';
+      return;
+    }
+
+    const a = backtestSignals(candles, 10, 'A');
+    const b = backtestSignals(candles, 20, 'B');
+    const all = [...a, ...b];
+    const longCount = all.filter(s=>s.direction==='long').length;
+    const shortCount = all.filter(s=>s.direction==='short').length;
+    const from = new Date(candles[0].time);
+    const to = new Date(candles[candles.length-1].time);
+    const days = Math.max((to-from)/86400000, 1/24);
+    const perDay = all.length / days;
+
+    resultEl.textContent =
+      `対象: ${AT.SYMBOL} / ${AT.TIMEFRAME}足\n` +
+      `期間: ${from.toLocaleString('ja-JP')} 〜 ${to.toLocaleString('ja-JP')}(約${days.toFixed(1)}日・${candles.length}本)\n` +
+      `シグナル合計: ${all.length}回(パターンA: ${a.length} / パターンB: ${b.length} / LONG: ${longCount} / SHORT: ${shortCount})\n` +
+      `1日あたり目安: 約${fmt(perDay,2)}回\n` +
+      `※過去の出現回数の集計であり、将来の頻度・利益を保証するものではありません。`;
+    atLog('SIG', `過去シグナル頻度を確認: 合計${all.length}回(約${days.toFixed(1)}日間・1日あたり約${fmt(perDay,2)}回)`);
+  }catch(err){
+    resultEl.textContent = `集計に失敗しました: ${err.message}`;
+    atLog('ERR', `バックテスト集計失敗: ${err.message}`);
+  }finally{
+    btn.disabled = !LIVE_MODE;
+  }
 }
 
 // ---------- MicroFish nodes (init once, drift over time) ----------

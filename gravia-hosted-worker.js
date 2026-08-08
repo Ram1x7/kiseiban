@@ -148,6 +148,7 @@ async function handleDashboard(reqUrl, env) {
       TIMEFRAME_C: env.AUTOTRADE_TIMEFRAME_C || undefined,
       TIMEFRAME_D: env.AUTOTRADE_TIMEFRAME_D || undefined,
       TIMEFRAME_F: env.AUTOTRADE_TIMEFRAME_F || undefined,
+      TIMEFRAME_E: env.AUTOTRADE_TIMEFRAME_E || undefined,
     },
   };
 

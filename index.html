@@ -790,7 +790,7 @@ function initAutotradeUI(){
   } else if(!LIVE_MODE){
     note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。自動売買はLIVE接続時のみ有効です。';
   } else {
-    note.textContent = 'config.jsのAUTOTRADE.ENABLEDがfalseのため無効化されています。有効にするにはconfig.jsを編集してください。';
+    note.textContent = 'AUTOTRADE.ENABLEDがfalseのため無効化されています。有効にするには設定(config.js、またはホスト先WorkerのAUTOTRADE_ENABLED変数)を編集してください。';
   }
   toggle.addEventListener('change', (e)=>{
     atState.enabled = e.target.checked;

@@ -1083,6 +1083,74 @@ function backtestPatternG(candles){
   return results;
 }
 
+// =========================================================
+// PATTERN H — N-wave + Fibonacci retracement.
+//   1) An "N-shaped" impulsive leg between two confirmed swing pivots
+//      (reusing the same pivot detection as pattern E): low -> high for a
+//      LONG setup, high -> low for a SHORT setup
+//   2) Fibonacci retracement zone (the 50%–61.8% "golden zone") measured
+//      back from the impulse's end point toward its start
+//   3) Entry: price pulls back into that zone and the touching candle
+//      confirms in the impulse direction
+//   4) TP: a 127.2% Fibonacci extension beyond the impulse; SL: the
+//      impulse's origin (its invalidation point)
+// =========================================================
+const FIB_ZONE_START = 0.5;   // shallow edge of the "golden zone"
+const FIB_ZONE_END = 0.618;   // deep edge of the "golden zone"
+const FIB_EXTENSION = 0.272;  // 127.2% extension used as the take-profit target
+
+// Checks whether the LAST candle in `candles` is a live, actionable
+// N-wave/Fibonacci entry right now. Also used for backtesting by calling
+// it repeatedly on growing prefixes of the series, same as pattern E.
+function detectPatternH(candles){
+  const lastIdx = candles.length-1;
+  const minLen = DOW_PIVOT_WING*2 + 10;
+  if(candles.length < minLen) return null;
+
+  const { highs, lows } = findSwingPivots(candles, lastIdx-1, DOW_PIVOT_WING);
+  if(highs.length < 1 || lows.length < 1) return null;
+
+  const lastHigh = highs[highs.length-1];
+  const lastLow = lows[lows.length-1];
+  const last = candles[lastIdx];
+
+  // LONG: most recent impulse leg runs low -> high
+  if(lastHigh.idx > lastLow.idx && lastHigh.price > lastLow.price){
+    const A = lastLow.price, B = lastHigh.price;
+    const zoneHigh = B - (B-A)*FIB_ZONE_START;
+    const zoneLow = B - (B-A)*FIB_ZONE_END;
+    const touches = last.low <= zoneHigh && last.high >= zoneLow;
+    if(touches && last.close > last.open){
+      const tp = B + (B-A)*FIB_EXTENSION;
+      return { direction:'long', tp, sl:A, signalId: String(last.time || lastIdx), patternKey:'H' };
+    }
+  }
+
+  // SHORT: most recent impulse leg runs high -> low
+  if(lastLow.idx > lastHigh.idx && lastLow.price < lastHigh.price){
+    const A = lastHigh.price, B = lastLow.price;
+    const zoneLow = B + (A-B)*FIB_ZONE_START;
+    const zoneHigh = B + (A-B)*FIB_ZONE_END;
+    const touches = last.low <= zoneHigh && last.high >= zoneLow;
+    if(touches && last.close < last.open){
+      const tp = B - (A-B)*FIB_EXTENSION;
+      return { direction:'short', tp, sl:A, signalId: String(last.time || lastIdx), patternKey:'H' };
+    }
+  }
+
+  return null;
+}
+
+function backtestPatternH(candles){
+  const minLen = DOW_PIVOT_WING*2 + 10;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternH(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'H', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -1161,6 +1229,9 @@ function patternDefs(){
     { key:'G', timeframe: AT.TIMEFRAME_G || AT.TIMEFRAME,
       detect: detectPatternG,
       backtest: backtestPatternG },
+    { key:'H', timeframe: AT.TIMEFRAME_H || AT.TIMEFRAME,
+      detect: detectPatternH,
+      backtest: backtestPatternH },
   ];
 }
 

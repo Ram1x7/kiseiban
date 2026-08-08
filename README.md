@@ -7,6 +7,7 @@
 - `index.html` — ダッシュボード本体。これをブラウザで開くだけで動きます。GitHub Pagesにそのまま置いてもOK。
 - `config.js` — MetaApiのトークン・口座IDを書く設定ファイル。**`.gitignore`で除外されておりコミットされません**。最初は存在しないので、`config.example.js`をコピーして作成してください。
 - `config.example.js` — `config.js`のテンプレート(値は空欄でコミットされています)。
+- `metaapi-proxy-worker.js` — MetaApiのREST APIはブラウザからの直接アクセス(CORS)に対応していないため、これをCloudflare Workersにデプロイして中継させる(下記「2.5」参照)。
 
 ## ⚠️ このリポジトリはpublicです(重要)
 
@@ -43,6 +44,16 @@ const CONFIG = {
 ```
 
 保存してブラウザで`index.html`をリロードすれば、口座残高・約定履歴・ポジションが本物のデータで表示されます。`config.js`は`.gitignore`で除外されているため、**このファイルは`git push`されず、GitHub Pages上には反映されません**(意図した動作です)。iPadでローカルに試したい場合は、Textastic・Working Copyなどのアプリでリポジトリをクローンし、アプリ内で`config.js`を作成・編集してください(GitHub上のWeb編集画面で直接書き換えて`git push`することは、トークンが公開されてしまうため絶対に行わないでください)。
+
+## 2.5. MetaApi中継Workerをデプロイする(CORS対策・必須)
+
+MetaApiの取引用REST APIはブラウザからの直接アクセス(CORS)に対応していないため、上記の設定だけではデータ取得・発注に失敗します(実行ログに `network error calling ...` のようなエラーが出ます)。`metaapi-proxy-worker.js` をCloudflare Workersにデプロイして中継させてください。
+
+1. https://dash.cloudflare.com/ → 「Workers & Pages」→「Create」→**「Hello World」等の空のテンプレートから作成**(「Import a repository」は選ばないこと)
+2. エディタの中身を `metaapi-proxy-worker.js` の内容で丸ごと置き換えて「Deploy」
+3. 発行されたURL(`https://xxxx.workers.dev`)を `config.js` の `WORKER_PROXY_URL` に設定(末尾のスラッシュは不要)
+
+このWorkerはMetaApi(`*.agiliumtrade.ai`)以外への転送を拒否するようになっており、認証トークン自体を保存・記録することもありません。あくまでCORSを回避するためだけの中継です。
 
 ## 3. 自動売買(参考実装・任意)
 

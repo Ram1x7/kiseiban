@@ -16,6 +16,12 @@ const CONFIG = {
   SYMBOL: 'BTCUSD',         // ローソク足に表示したいシンボル(ブローカーの銘柄名に合わせて変更)
   POLL_MS: 5000,            // 何msごとにMT5へ問い合わせるか(短すぎるとAPI制限に注意)
 
+  // MetaApiの取引用REST APIはブラウザからの直接アクセス(CORS)に対応していないため、
+  // metaapi-proxy-worker.js をCloudflare Workersにデプロイし、発行されたURLをここに
+  // 設定する(末尾のスラッシュは不要)。未設定の場合は直接アクセスを試みるが、
+  // 動作しない可能性が高い。
+  WORKER_PROXY_URL: '',     // 例: 'https://gravia-proxy.xxxx.workers.dev'
+
   // ---- 自動売買(EMAタッチ+ピンバー戦略) ----
   // 必ずデモ口座で動作確認してから使ってください。ENABLEDをtrueにしても、
   // 画面上の「自動売買」トグルを別途ONにしない限り発注は行われません

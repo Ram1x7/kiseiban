@@ -148,12 +148,28 @@
   .tag.WIN{ color:var(--green); }
   .tag.IN{ color:var(--amber); }
   .tag.TICK{ color:#7a8bff; }
+  .tag.SIG{ color:var(--amber); }
+  .tag.ORD{ color:#7a8bff; }
+  .tag.ERR{ color:var(--pink); }
   .logline .msg{ color:var(--txt); }
   .logline .px{ color:#fff; }
 
   .footer-note{
     margin-top:10px; text-align:center; color:var(--txt-dim); font-size:9px; letter-spacing:1px;
   }
+
+  /* ---------- Autotrade panel ---------- */
+  .autotrade-panel{ margin-bottom:10px; }
+  .at-row{ display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+  .at-toggle{ display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--txt); font-size:11px; }
+  .at-toggle input{ width:14px; height:14px; }
+  .at-toggle input:disabled{ opacity:0.4; cursor:not-allowed; }
+  .at-toggle b{ color:var(--pink); }
+  .at-toggle input:checked ~ span b{ color:var(--green); }
+  .at-stat{ display:flex; flex-direction:column; }
+  .at-stat .k{ color:var(--txt-dim); font-size:9px; letter-spacing:1px; }
+  .at-stat .v{ color:#fff; font-size:13px; font-weight:700; }
+  .at-note{ margin-top:8px; color:var(--txt-dim); font-size:9px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -174,6 +190,23 @@
     <div class="item"><span class="label">TIME</span><span class="val" id="hTime">00:00:00</span></div>
   </div>
 </header>
+
+<div class="panel autotrade-panel" id="autotradePanel">
+  <div class="panel-title">
+    <span>自動売買(USD/JPY・H4足 EMAタッチ+ピンバー) — 参考実装・利益を保証しません</span>
+    <span class="badge" id="atModeBadge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">要MetaApi接続</span>
+  </div>
+  <div class="at-row">
+    <label class="at-toggle">
+      <input type="checkbox" id="atEnableToggle" disabled>
+      <span>自動売買 <b id="atToggleState">OFF</b></span>
+    </label>
+    <div class="at-stat"><span class="k">本日の損益</span><span class="v" id="atDailyPnl">$0.00</span></div>
+    <div class="at-stat"><span class="k">保有ポジション</span><span class="v" id="atOpenPositions">0 / 1</span></div>
+    <div class="at-stat"><span class="k">直近判定</span><span class="v" id="atLastSignal">—</span></div>
+  </div>
+  <div class="at-note" id="atNote">MetaApiに接続され、config.jsで AUTOTRADE.ENABLED が true の場合のみ有効化されます。デモ口座での動作確認を強く推奨します。</div>
+</div>
 
 <div class="grid-row1">
 
@@ -293,6 +326,14 @@ if(typeof CONFIG === 'undefined'){
   // 意図的に配信されていない)場合の安全なフォールバック。
   window.CONFIG = { METAAPI_TOKEN:'', METAAPI_ACCOUNT_ID:'', METAAPI_REGION:'new-york', SYMBOL:'BTCUSD', POLL_MS:5000 };
 }
+if(!CONFIG.AUTOTRADE){
+  // 古いconfig.js(自動売買追加前)を使っている場合の安全なフォールバック。
+  // ENABLEDがfalseなので、これだけでは絶対に発注されない。
+  CONFIG.AUTOTRADE = {
+    ENABLED:false, SYMBOL:'USDJPY', TIMEFRAME:'4h', LOT_SIZE:0.01, LOOKBACK_BARS:20,
+    MAX_OPEN_POSITIONS:1, MAX_DAILY_LOSS:50, PINBAR_WICK_MULT:1.5, PINBAR_WICK_RATIO:0.5, POLL_MS:30000,
+  };
+}
 const LIVE_MODE = !!(CONFIG.METAAPI_TOKEN && CONFIG.METAAPI_ACCOUNT_ID);
 const API_BASE = `https://mt-client-api-v1.${CONFIG.METAAPI_REGION}.agiliumtrade.ai`;
 const MARKET_DATA_BASE = `https://mt-market-data-client-api-v1.${CONFIG.METAAPI_REGION}.agiliumtrade.ai`;
@@ -314,6 +355,7 @@ const state = {
   sellVols: [],
   buyVols: [],
   nodes: null,
+  positions: [],
 };
 
 function rnd(min, max){ return Math.random()*(max-min)+min; }
@@ -442,6 +484,7 @@ function mapLiveDataToState(data){
   if(liveInitialEquity === null) liveInitialEquity = account.equity;
   state.equity = account.equity;
   state.balance = account.balance;
+  state.positions = positions || [];
   state.equityHistory.push(account.equity);
   if(state.equityHistory.length > 200) state.equityHistory.shift();
 
@@ -500,6 +543,224 @@ async function liveTick(){
     const el = document.getElementById('logBody');
     if(el) el.insertAdjacentHTML('beforeend', `<div class="logline" style="color:#ff2e88">LIVE DATA ERROR: ${err.message}</div>`);
   }
+}
+
+// =========================================================
+// AUTOTRADE — EMA touch + pin bar strategy (reference implementation)
+// ---------------------------------------------------------
+// Does not guarantee profit. Test on a demo account before ever
+// considering a live account. Two independent switches must both be on
+// before any order is placed:
+//   1) CONFIG.AUTOTRADE.ENABLED, set in config.js (never committed to git)
+//   2) the on-screen toggle, which always starts OFF on every page load
+// A third safety net (MAX_OPEN_POSITIONS) also blocks re-entry even if
+// signal de-duplication ever misfires.
+// =========================================================
+const AT = CONFIG.AUTOTRADE;
+const atState = {
+  enabled: false,
+  openPositions: 0,
+  dailyLossHit: false,
+  lastSignalText: '—',
+  lastProcessed: {},
+  polling: false,
+};
+
+function emaSeries(values, period){
+  const out = new Array(values.length).fill(null);
+  const k = 2/(period+1);
+  let prev = null;
+  for(let i=0;i<values.length;i++){
+    if(i === period-1){
+      let seed = 0;
+      for(let j=0;j<period;j++) seed += values[j];
+      prev = seed/period;
+      out[i] = prev;
+    } else if(i >= period){
+      prev = values[i]*k + prev*(1-k);
+      out[i] = prev;
+    }
+  }
+  return out;
+}
+
+function isPinbar(candle, direction){
+  const body = Math.abs(candle.close - candle.open);
+  const range = candle.high - candle.low;
+  if(range <= 0) return false;
+  if(direction === 'long'){
+    const lowerWick = Math.min(candle.open, candle.close) - candle.low;
+    return lowerWick >= body*AT.PINBAR_WICK_MULT && (lowerWick/range) >= AT.PINBAR_WICK_RATIO && candle.close >= candle.open;
+  } else {
+    const upperWick = candle.high - Math.max(candle.open, candle.close);
+    return upperWick >= body*AT.PINBAR_WICK_MULT && (upperWick/range) >= AT.PINBAR_WICK_RATIO && candle.close <= candle.open;
+  }
+}
+
+// Pattern: EMA cross confirmed -> price pulls back and touches the EMA from
+// the trend side -> the touching candle is a pin bar. Only actionable if
+// that pin bar is the most recently CLOSED candle (i.e. we're right at the
+// start of the next candle), matching "次の足が始まった瞬間に発注".
+function detectSignal(candles, period, patternKey){
+  if(candles.length < period+5) return null;
+  const closes = candles.map(c=>c.close);
+  const emaVals = emaSeries(closes, period);
+
+  let crossIdx = -1, direction = null;
+  for(let i=period;i<candles.length;i++){
+    if(emaVals[i-1]==null || emaVals[i]==null) continue;
+    if(closes[i-1] <= emaVals[i-1] && closes[i] > emaVals[i]){ crossIdx = i; direction = 'long'; }
+    if(closes[i-1] >= emaVals[i-1] && closes[i] < emaVals[i]){ crossIdx = i; direction = 'short'; }
+  }
+  if(crossIdx === -1) return null;
+
+  let touchIdx = -1;
+  for(let i=crossIdx+1;i<candles.length;i++){
+    const c = candles[i], e = emaVals[i];
+    if(e == null) continue;
+    const touches = c.low <= e && c.high >= e;
+    if(touches && isPinbar(c, direction)) touchIdx = i;
+  }
+  if(touchIdx === -1 || touchIdx !== candles.length-1) return null;
+
+  const lookback = candles.slice(Math.max(0, touchIdx-AT.LOOKBACK_BARS), touchIdx+1);
+  const tp = direction==='long' ? Math.max(...lookback.map(c=>c.high)) : Math.min(...lookback.map(c=>c.low));
+  const sl = direction==='long' ? Math.min(...lookback.map(c=>c.low)) : Math.max(...lookback.map(c=>c.high));
+  const signalId = String(candles[touchIdx].time || touchIdx);
+  return { direction, tp, sl, signalId, patternKey };
+}
+
+async function placeOrder(direction, tp, sl){
+  const body = {
+    actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
+    symbol: AT.SYMBOL,
+    volume: AT.LOT_SIZE,
+    takeProfit: tp,
+    stopLoss: sl,
+    comment: 'gravia-auto',
+  };
+  const res = await fetch(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/trade`, {
+    method: 'POST',
+    headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data;
+  try{ data = JSON.parse(text); }catch(e){ data = { raw: text.slice(0,200) }; }
+  if(!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data).slice(0,200)}`);
+  return data;
+}
+
+function atLog(tag, msg){
+  const el = document.getElementById('logBody');
+  const t = new Date().toTimeString().slice(0,8);
+  if(el){
+    el.insertAdjacentHTML('beforeend', `<div class="logline"><span class="t">${t}</span><span class="tag ${tag}">${tag}</span><span class="msg">${msg}</span></div>`);
+    el.scrollTop = el.scrollHeight;
+  }
+  console.log(`[AUTOTRADE ${tag}]`, msg);
+}
+
+function updateAutotradeUI(){
+  const pnlEl = document.getElementById('atDailyPnl');
+  pnlEl.textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+  pnlEl.style.color = state.pnl>=0 ? 'var(--green)' : 'var(--pink)';
+  document.getElementById('atOpenPositions').textContent = `${atState.openPositions} / ${AT.MAX_OPEN_POSITIONS}`;
+  document.getElementById('atLastSignal').textContent = atState.lastSignalText;
+  document.getElementById('atToggleState').textContent = atState.enabled ? 'ON' : 'OFF';
+}
+
+async function autotradeTick(){
+  if(atState.polling) return;
+  atState.polling = true;
+  try{
+    if(!LIVE_MODE || !AT.ENABLED){ updateAutotradeUI(); return; }
+
+    atState.openPositions = (state.positions || []).length;
+
+    // Daily loss circuit breaker, using the same ~24h realized PnL already
+    // tracked in state.pnl from history-deals.
+    if(state.pnl <= -Math.abs(AT.MAX_DAILY_LOSS)){
+      if(!atState.dailyLossHit){
+        atState.dailyLossHit = true;
+        atLog('ERR', `本日の最大損失(${fmtMoney(-Math.abs(AT.MAX_DAILY_LOSS))})に達したため、新規発注を停止しました。`);
+      }
+      updateAutotradeUI();
+      return;
+    }
+    atState.dailyLossHit = false;
+
+    const cbase = `${MARKET_DATA_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
+    const raw = await metaApiFetch(`${cbase}/historical-market-data/symbols/${AT.SYMBOL}/timeframes/${AT.TIMEFRAME}/candles?limit=100`);
+    const candles = (raw||[]).map(c=>({ open:c.open, high:c.high, low:c.low, close:c.close, time:c.time }));
+
+    if(candles.length < 30){
+      atState.lastSignalText = 'データ不足';
+      updateAutotradeUI();
+      return;
+    }
+
+    const signal = detectSignal(candles, 10, 'A') || detectSignal(candles, 20, 'B');
+    if(!signal){
+      atState.lastSignalText = `様子見 (${new Date().toTimeString().slice(0,8)})`;
+      updateAutotradeUI();
+      return;
+    }
+
+    const dedupKey = signal.patternKey+'_'+signal.direction;
+    if(atState.lastProcessed[dedupKey] === signal.signalId){ updateAutotradeUI(); return; }
+    atState.lastProcessed[dedupKey] = signal.signalId;
+
+    const label = `パターン${signal.patternKey} ${signal.direction==='long'?'LONG':'SHORT'}`;
+    atLog('SIG', `${label} シグナル検出(参考) TP ${fmt(signal.tp,3)} / SL ${fmt(signal.sl,3)}`);
+    atState.lastSignalText = `${label} 検出`;
+
+    if(!atState.enabled){
+      atLog('SIG', '自動売買トグルがOFFのため発注しません。');
+      updateAutotradeUI();
+      return;
+    }
+    if(atState.openPositions >= AT.MAX_OPEN_POSITIONS){
+      atLog('SIG', `保有ポジション上限(${AT.MAX_OPEN_POSITIONS})に達しているため発注しません。`);
+      updateAutotradeUI();
+      return;
+    }
+
+    try{
+      const result = await placeOrder(signal.direction, signal.tp, signal.sl);
+      atLog('ORD', `発注成功: ${label} ロット${AT.LOT_SIZE} ${JSON.stringify(result).slice(0,120)}`);
+    }catch(err){
+      atLog('ERR', `発注失敗: ${label} — ${err.message}`);
+    }
+    updateAutotradeUI();
+  }catch(err){
+    atLog('ERR', `戦略判定エラー: ${err.message}`);
+  }finally{
+    atState.polling = false;
+  }
+}
+
+function initAutotradeUI(){
+  const toggle = document.getElementById('atEnableToggle');
+  const badge = document.getElementById('atModeBadge');
+  const note = document.getElementById('atNote');
+  const canArm = LIVE_MODE && AT.ENABLED;
+  toggle.disabled = !canArm;
+  if(canArm){
+    badge.textContent = '接続中';
+    badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)'; badge.style.borderColor = 'var(--green)';
+    note.textContent = `対象: ${AT.SYMBOL} / ${AT.TIMEFRAME}足 / ロット${AT.LOT_SIZE} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
+  } else if(!LIVE_MODE){
+    note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。自動売買はLIVE接続時のみ有効です。';
+  } else {
+    note.textContent = 'config.jsのAUTOTRADE.ENABLEDがfalseのため無効化されています。有効にするにはconfig.jsを編集してください。';
+  }
+  toggle.addEventListener('change', (e)=>{
+    atState.enabled = e.target.checked;
+    atLog('SIG', `自動売買を${atState.enabled?'ON':'OFF'}にしました。`);
+    updateAutotradeUI();
+  });
+  updateAutotradeUI();
 }
 
 // ---------- MicroFish nodes (init once, drift over time) ----------
@@ -755,6 +1016,7 @@ function renderAll(){
 
 // ---------- Main loop ----------
 initNodes();
+initAutotradeUI();
 
 if(LIVE_MODE){
   document.querySelectorAll('.sub').forEach(el=> el.innerHTML = '<span class="live-dot"></span>LIVE · MT5');
@@ -762,6 +1024,10 @@ if(LIVE_MODE){
   document.querySelector('.footer-note').textContent = 'GRAVIA DASHBOARD — MetaApi 経由の実データ(口座: ' + CONFIG.METAAPI_ACCOUNT_ID.slice(0,8) + '…)';
   liveTick();
   setInterval(liveTick, CONFIG.POLL_MS);
+  if(AT.ENABLED){
+    autotradeTick();
+    setInterval(autotradeTick, AT.POLL_MS);
+  }
 } else {
   for(let i=0;i<26;i++) simulateTick(); // seed initial data so it doesn't start empty
   function tick(){

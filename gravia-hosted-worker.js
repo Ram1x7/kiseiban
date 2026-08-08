@@ -1,0 +1,168 @@
+// gravia-hosted-worker.js
+//
+// Gravia全体(ダッシュボード + MetaApi中継)を、このCloudflare Worker一つだけで
+// ホストするためのスクリプトです。iPad/iPhoneのSafariから普通の https:// URL
+// として開けるようにすることが目的です(ローカルファイルやWorking Copyの
+// プレビュー機能に依存しません)。
+//
+// 重要: MetaApiのAPIトークンはこのWorkerの「Secret」としてのみ保存し、
+// 配信するHTML/JSには一切含めません。ブラウザ側のJavaScriptは
+// トークンの実際の値を知ることも送信することもなく、この同じWorkerの
+// 中継エンドポイント(?url=...)にリクエストするだけです。実トークンは
+// Cloudflare側でこのWorkerがMetaApiへ転送する際にサーバー側で付与します。
+//
+// さらに重要: このWorkerはURLさえ知っていれば誰でも開けます(パスワード等
+// なし)。実トークンをサーバー側で自動付与する設計上、もしURLが漏れると
+// 誰でも口座情報の閲覧・発注ができてしまいます。これを防ぐため、
+// ACCESS_KEY という共有シークレットをこのWorkerのSecretとして必ず設定し、
+// ダッシュボードには `https://xxxx.workers.dev/?key=<ACCESS_KEYの値>` の
+// 形式のURL(キー付き)でアクセスしてください。キーが一致しない、または
+// ACCESS_KEY自体が未設定の場合はすべてのリクエストを拒否します。
+//
+// デプロイ手順・Secret/変数の設定方法は README.md を参照してください。
+
+const ALLOWED_HOST_SUFFIX = '.agiliumtrade.ai';
+
+// ダッシュボード本体(index.html)の取得元。GitHub Pages上のindex.htmlは
+// config.jsが存在しないため常にシミュレーションモードのソースであり、
+// トークン等の秘密情報は一切含まれません。このWorkerが取得後にCONFIGだけ
+// 差し替えて配信します。
+const SOURCE_HTML_URL = 'https://ram1x7.github.io/kiseiban/index.html';
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, auth-token, Accept',
+};
+
+function errorResponse(status, message) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
+function numOr(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) && value !== undefined && value !== '' ? n : fallback;
+}
+
+function checkAccessKey(reqUrl, env) {
+  if (!env.ACCESS_KEY) {
+    return errorResponse(500, 'ACCESS_KEY secret not configured on this Worker. このWorkerはURLを知る誰でも開けてしまうため、README.mdの手順に従いACCESS_KEYを必ず設定してください。');
+  }
+  const provided = reqUrl.searchParams.get('key') || '';
+  if (provided !== env.ACCESS_KEY) {
+    return errorResponse(403, 'invalid or missing key');
+  }
+  return null;
+}
+
+async function handleProxy(request, targetParam, env) {
+  let targetUrl;
+  try {
+    targetUrl = new URL(targetParam);
+  } catch (e) {
+    return errorResponse(400, 'invalid url: ' + targetParam);
+  }
+  if (!targetUrl.hostname.endsWith(ALLOWED_HOST_SUFFIX)) {
+    return errorResponse(403, 'host not allowed: ' + targetUrl.hostname);
+  }
+  if (!env.METAAPI_TOKEN) {
+    return errorResponse(500, 'METAAPI_TOKEN secret not configured on this Worker (Settings > Variables and Secrets)');
+  }
+
+  try {
+    const upstreamHeaders = new Headers();
+    // 実トークンはここでサーバー側からのみ付与する。クライアントが送った
+    // auth-tokenヘッダーがあっても無視する(そもそもクライアントは実トークンを
+    // 知らない)。
+    upstreamHeaders.set('auth-token', env.METAAPI_TOKEN);
+    upstreamHeaders.set('Accept', 'application/json');
+    const contentType = request.headers.get('Content-Type');
+    if (contentType) upstreamHeaders.set('Content-Type', contentType);
+
+    const hasBody = !(request.method === 'GET' || request.method === 'HEAD');
+    const upstream = await fetch(targetUrl.toString(), {
+      method: request.method,
+      headers: upstreamHeaders,
+      body: hasBody ? await request.text() : undefined,
+    });
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: {
+        ...CORS_HEADERS,
+        'Content-Type': upstream.headers.get('Content-Type') || 'application/json',
+      },
+    });
+  } catch (err) {
+    return errorResponse(502, String(err));
+  }
+}
+
+async function handleDashboard(reqUrl, env) {
+  let html;
+  try {
+    const src = await fetch(SOURCE_HTML_URL, { cf: { cacheTtl: 30, cacheEverything: true } });
+    if (!src.ok) throw new Error('HTTP ' + src.status);
+    html = await src.text();
+  } catch (err) {
+    return new Response('ダッシュボードの取得に失敗しました(SOURCE_HTML_URLを確認してください): ' + err, { status: 502 });
+  }
+
+  if (!env.METAAPI_ACCOUNT_ID) {
+    return new Response(
+      'METAAPI_ACCOUNT_ID が未設定です。Cloudflareダッシュボード > Workers & Pages > このWorker > Settings > Variables and Secrets で設定してください。',
+      { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
+  // クライアントに渡すCONFIG。METAAPI_TOKENは実トークンではなく、
+  // LIVE_MODE判定を有効にするためだけのダミー文字列。実際の認証は
+  // このWorkerが中継時にサーバー側で行う。
+  const config = {
+    METAAPI_TOKEN: 'server-side-only',
+    METAAPI_ACCOUNT_ID: env.METAAPI_ACCOUNT_ID,
+    METAAPI_REGION: env.METAAPI_REGION || 'new-york',
+    SYMBOL: env.SYMBOL || 'BTCUSD',
+    POLL_MS: numOr(env.POLL_MS, 5000),
+    WORKER_PROXY_URL: reqUrl.origin,
+    AUTOTRADE: {
+      ENABLED: env.AUTOTRADE_ENABLED === 'true',
+      SYMBOL: env.AUTOTRADE_SYMBOL || 'USDJPY',
+      TIMEFRAME: env.AUTOTRADE_TIMEFRAME || '4h',
+      LOT_SIZE: numOr(env.AUTOTRADE_LOT_SIZE, 0.01),
+      LOOKBACK_BARS: numOr(env.AUTOTRADE_LOOKBACK_BARS, 20),
+      MAX_OPEN_POSITIONS: numOr(env.AUTOTRADE_MAX_OPEN_POSITIONS, 1),
+      MAX_DAILY_LOSS: numOr(env.AUTOTRADE_MAX_DAILY_LOSS, 50),
+      PINBAR_WICK_MULT: numOr(env.AUTOTRADE_PINBAR_WICK_MULT, 1.5),
+      PINBAR_WICK_RATIO: numOr(env.AUTOTRADE_PINBAR_WICK_RATIO, 0.5),
+      POLL_MS: numOr(env.AUTOTRADE_POLL_MS, 30000),
+    },
+  };
+
+  const configScript = `<script>window.CONFIG = ${JSON.stringify(config)};</script>`;
+  const injected = html.replace('<script src="config.js"></script>', configScript);
+
+  return new Response(injected, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
+export default {
+  async fetch(request, env) {
+    if (request.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS });
+
+    const reqUrl = new URL(request.url);
+
+    const keyError = checkAccessKey(reqUrl, env);
+    if (keyError) return keyError;
+
+    const target = reqUrl.searchParams.get('url');
+    if (target) {
+      return handleProxy(request, target, env);
+    }
+    return handleDashboard(reqUrl, env);
+  },
+};

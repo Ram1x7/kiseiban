@@ -5,9 +5,10 @@
 ## ファイル
 
 - `index.html` — ダッシュボード本体。これをブラウザで開くだけで動きます。GitHub Pagesにそのまま置いてもOK。
-- `config.js` — MetaApiのトークン・口座IDを書く設定ファイル。**`.gitignore`で除外されておりコミットされません**。最初は存在しないので、`config.example.js`をコピーして作成してください。
+- `config.js` — MetaApiのトークン・口座IDを書く設定ファイル。**`.gitignore`で除外されておりコミットされません**。最初は存在しないので、`config.example.js`をコピーして作成してください。(下記「方法B」で使用)
 - `config.example.js` — `config.js`のテンプレート(値は空欄でコミットされています)。
-- `metaapi-proxy-worker.js` — MetaApiのREST APIはブラウザからの直接アクセス(CORS)に対応していないため、これをCloudflare Workersにデプロイして中継させる(下記「2.5」参照)。
+- `metaapi-proxy-worker.js` — MetaApiのREST APIはブラウザからの直接アクセス(CORS)に対応していないため、これをCloudflare Workersにデプロイして中継させる(下記「方法B」で使用)。
+- `gravia-hosted-worker.js` — **iPad/iPhoneだけで完結する推奨方式**。ダッシュボード全体をCloudflare Worker一つでホストし、トークンはCloudflareの「Secret」にのみ保存する(下記「方法A」で使用)。
 
 ## ⚠️ このリポジトリはpublicです(重要)
 
@@ -25,7 +26,52 @@
 3. https://app.metaapi.cloud/accounts で「Add account」→ MT5のログインID・パスワード・サーバー名(ブローカーから発行されているもの)を入力して接続
 4. 接続が完了すると **Account ID**(例: `865d3a4d-3803-486d-bdf3-a85679d9fad2`)が表示されるのでコピー
 
-## 2. config.js に設定を入れる(ローカルのみ・Gitにはコミットしない)
+## 2. ダッシュボードを開く:2つの方法
+
+どちらも安全にトークンを扱えますが、**iPad/iPhoneだけで作業している場合は方法Aを強く推奨**します(方法Bはローカルファイルをブラウザで開く必要があり、Working Copyアプリのプレビュー機能などiOS側の制限で正しく動かない場合があるため)。
+
+### 方法A(推奨・iPad/iPhoneだけで完結): Graviaを丸ごとCloudflare Workerでホストする
+
+`gravia-hosted-worker.js` を使い、ダッシュボード自体を`https://xxxx.workers.dev`という普通のURLとしてホストします。トークンはブラウザ側のコードには一切含まれず、Cloudflareの「Secret」にのみ保存されます。実際の認証もWorkerがサーバー側で行うため、ブラウザのJavaScriptは実トークンを一度も見ることがありません。
+
+1. https://dash.cloudflare.com/ → 「Workers & Pages」→「Create」→**「Hello World」等の空のテンプレートから作成**(「Import a repository」は選ばないこと)
+2. エディタの中身を、このリポジトリの `gravia-hosted-worker.js` の内容で丸ごと置き換えて「Deploy」
+3. デプロイしたWorkerの「Settings」→「Variables and Secrets」を開き、以下を追加します
+
+   **必ずSecret(暗号化)として追加するもの:**
+
+   | 名前 | 値 |
+   |---|---|
+   | `METAAPI_TOKEN` | MetaApiのAPIトークン(上記「1.」で取得したもの) |
+   | `METAAPI_ACCOUNT_ID` | MetaApiのAccount ID(上記「1.」で取得したもの) |
+   | `ACCESS_KEY` | **自分で決める合言葉(誰にも推測されない適当な英数字の文字列)**。このWorkerはURLさえ知っていれば誰でも開けてしまうため、この鍵でアクセスを制限します。未設定の場合はダッシュボードが一切開けなくなります(安全側の既定動作) |
+
+   **必要に応じて追加する(通常のVariableでOK。未設定でも既定値で動きます):**
+
+   | 名前 | 既定値 | 説明 |
+   |---|---|---|
+   | `METAAPI_REGION` | `new-york` | 口座を追加した地域(例: `london`) |
+   | `SYMBOL` | `BTCUSD` | ローソク足に表示する銘柄 |
+   | `POLL_MS` | `5000` | 何msごとにMT5へ問い合わせるか |
+   | `AUTOTRADE_ENABLED` | `false` | `true`にすると自動売買のマスタースイッチがONになる(下記「3.」参照) |
+   | `AUTOTRADE_SYMBOL` | `USDJPY` | 自動売買の対象銘柄 |
+   | `AUTOTRADE_TIMEFRAME` | `4h` | 自動売買の判定時間足 |
+   | `AUTOTRADE_LOT_SIZE` | `0.01` | 1回あたりのロット数 |
+   | `AUTOTRADE_LOOKBACK_BARS` | `20` | 利確/損切りの基準にする直近バー数 |
+   | `AUTOTRADE_MAX_OPEN_POSITIONS` | `1` | 同時保有ポジション数の上限 |
+   | `AUTOTRADE_MAX_DAILY_LOSS` | `50` | 本日の実現損益がこれを下回ったら新規発注を停止 |
+   | `AUTOTRADE_PINBAR_WICK_MULT` | `1.5` | ピンバー判定の閾値 |
+   | `AUTOTRADE_PINBAR_WICK_RATIO` | `0.5` | ピンバー判定の閾値 |
+   | `AUTOTRADE_POLL_MS` | `30000` | 戦略判定の間隔 |
+
+4. 保存後、`https://xxxx.workers.dev/?key=<ACCESS_KEYに設定した値>` をSafariで開きます。これがあなたの本番ダッシュボードURLです。**このURL(鍵付き)をSafariのブックマーク/ホーム画面に追加**しておくと便利です
+5. `key`が一致しない、または`ACCESS_KEY`/`METAAPI_TOKEN`/`METAAPI_ACCOUNT_ID`のいずれかが未設定の場合は、安全のためすべてのリクエストが拒否されます(エラーメッセージに何が未設定かが表示されます)
+
+このWorkerは内部で `metaapi-proxy-worker.js` と同様のCORS中継も兼ねているため、**この方法を使う場合は`metaapi-proxy-worker.js`を別途デプロイする必要はありません**。設定を変更したい場合(銘柄・時間足など)は、上記のVariablesを編集して再度「Deploy」するだけです。`config.js`はこの方法では使いません。
+
+⚠️ `ACCESS_KEY`はパスワードと同じです。他人に教えず、URLも安易に共有しないでください。
+
+### 方法B: 自分の端末のconfig.jsを使う(PC推奨。iPadでも可能だが制限あり)
 
 `config.example.js` をコピーして `config.js` を作成し、中身を書き換えます。
 
@@ -45,7 +91,7 @@ const CONFIG = {
 
 保存してブラウザで`index.html`をリロードすれば、口座残高・約定履歴・ポジションが本物のデータで表示されます。`config.js`は`.gitignore`で除外されているため、**このファイルは`git push`されず、GitHub Pages上には反映されません**(意図した動作です)。iPadでローカルに試したい場合は、Textastic・Working Copyなどのアプリでリポジトリをクローンし、アプリ内で`config.js`を作成・編集してください(GitHub上のWeb編集画面で直接書き換えて`git push`することは、トークンが公開されてしまうため絶対に行わないでください)。
 
-## 2.5. MetaApi中継Workerをデプロイする(CORS対策・必須)
+### 2.5. MetaApi中継Workerをデプロイする(CORS対策・必須。方法Bのみ)
 
 MetaApiの取引用REST APIはブラウザからの直接アクセス(CORS)に対応していないため、上記の設定だけではデータ取得・発注に失敗します(実行ログに `network error calling ...` のようなエラーが出ます)。`metaapi-proxy-worker.js` をCloudflare Workersにデプロイして中継させてください。
 
@@ -60,8 +106,8 @@ MetaApiの取引用REST APIはブラウザからの直接アクセス(CORS)に�
 USD/JPYのH4足で「EMAタッチ+ピンバー」を検出し、条件が揃うと自動で成行発注する機能です。**利益を保証するものではありません**。有効化する前に必ず以下を理解してください。
 
 - **必ずデモ口座で動作確認してから使ってください。** 本番口座でいきなり有効化することはおすすめしません
-- 発注には2つの独立したスイッチが両方ONである必要があります: (1) `config.js`の`AUTOTRADE.ENABLED`、(2) 画面上の「自動売買」トグル。**トグルは安全のため、ページを開き直すたびに毎回OFFにリセットされます**
-- `config.js`の`AUTOTRADE`セクションで、対象銘柄・時間足・ロット数・同時保有上限・日次最大損失額などを調整できます(`config.example.js`にデフォルト値付きで記載)
+- 発注には2つの独立したスイッチが両方ONである必要があります: (1) マスタースイッチ(方法A: Workerの`AUTOTRADE_ENABLED`変数 / 方法B: `config.js`の`AUTOTRADE.ENABLED`)、(2) 画面上の「自動売買」トグル。**トグルは安全のため、ページを開き直すたびに毎回OFFにリセットされます**
+- 対象銘柄・時間足・ロット数・同時保有上限・日次最大損失額などを調整できます(方法A: Workerの`AUTOTRADE_*`変数 / 方法B: `config.js`の`AUTOTRADE`セクション。`config.example.js`にデフォルト値付きで記載)
 - 同時保有ポジション数の上限と、本日の実現損益が設定額を下回った場合の新規発注停止(サーキットブレーカー)を実装していますが、これらはあくまで参考実装であり、あらゆる相場状況・ブローカーの挙動を考慮したものではありません
 - 実行ログ(画面下部)に、シグナル検出・発注成功/失敗がすべて記録されます
 
@@ -86,3 +132,5 @@ MetaApiは無料枠がありますが、常時ライブでポーリングし続�
 - ブラウザのコンソール、または画面下部の実行ログに赤字でエラーが出ます
 - `METAAPI_ACCOUNT_ID` の口座がMetaApi側で「deployed」状態になっているか確認してください(初回接続直後は数分かかることがあります)
 - `SYMBOL` がブローカーの銘柄名と一致しているか確認してください(例: `BTCUSD` ではなく `BTCUSD.` など末尾にサフィックスが付くブローカーもあります)
+- (方法A) `{"error":"invalid or missing key"}` と出る場合はURLの `?key=...` が`ACCESS_KEY`の値と一致していません。`{"error":"ACCESS_KEY secret not configured..."}` の場合はCloudflare側でSecretを設定し忘れています
+- (方法A) ダッシュボードの中身が古い場合、`gravia-hosted-worker.js`は`index.html`をGitHub Pagesから30秒キャッシュして取得しています。少し待つか再読み込みしてください

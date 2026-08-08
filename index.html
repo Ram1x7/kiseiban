@@ -457,7 +457,14 @@ function proxiedUrl(url){
   // If a Worker proxy URL is configured, route every call through it (server
   // side, no CORS restriction); otherwise fall back to a direct call in case
   // a given deployment happens to work without one.
-  return CONFIG.WORKER_PROXY_URL ? `${CONFIG.WORKER_PROXY_URL}?url=${encodeURIComponent(url)}` : url;
+  if(!CONFIG.WORKER_PROXY_URL) return url;
+  const qs = new URLSearchParams({ url });
+  // If this page itself was opened with a ?key= access key (used by the
+  // self-hosted Worker deployment to gate access), forward the same key to
+  // every proxied request so the Worker can verify it server side.
+  const pageKey = new URLSearchParams(window.location.search).get('key');
+  if(pageKey) qs.set('key', pageKey);
+  return `${CONFIG.WORKER_PROXY_URL}?${qs.toString()}`;
 }
 
 async function metaApiFetch(url){

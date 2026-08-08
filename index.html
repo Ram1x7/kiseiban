@@ -1031,6 +1031,58 @@ function backtestPatternE(candles){
   return results;
 }
 
+// =========================================================
+// PATTERN G — Bollinger Bands ±2σ mean reversion.
+//   1) 20-period SMA + 2 standard deviations = the upper/lower bands
+//   2) A candle's wick pierces outside a band
+//   3) That same candle's close comes back inside the band, with a
+//      confirming close in the reversion direction (contrarian entry)
+// This is a mean-reversion pattern — philosophically the opposite of the
+// trend-following patterns above (A/B/D/E/F), so running both kinds at
+// once can produce opposite-direction signals around the same time.
+// =========================================================
+const BB_PERIOD = 20;
+const BB_STDDEV_MULT = 2;
+
+function stddev(values){
+  const mean = values.reduce((a,b)=>a+b, 0) / values.length;
+  const variance = values.reduce((a,b)=>a+(b-mean)**2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+// Checks whether the LAST candle in `candles` is a live, actionable band
+// tap-and-reject entry right now. Also used for backtesting by calling it
+// repeatedly on growing prefixes of the series — SMA/stddev over a fixed
+// trailing window are purely causal, so re-slicing gives identical values.
+function detectPatternG(candles){
+  if(candles.length < BB_PERIOD+2) return null;
+  const lastIdx = candles.length-1;
+  const window = candles.slice(lastIdx-BB_PERIOD+1, lastIdx+1).map(c=>c.close);
+  const sma = window.reduce((a,b)=>a+b, 0) / window.length;
+  const sd = stddev(window);
+  const upper = sma + BB_STDDEV_MULT*sd;
+  const lower = sma - BB_STDDEV_MULT*sd;
+
+  const last = candles[lastIdx];
+  if(last.low <= lower && last.close > lower && last.close > last.open){
+    return { direction:'long', tp: sma, sl: last.low, signalId: String(last.time || lastIdx), patternKey:'G' };
+  }
+  if(last.high >= upper && last.close < upper && last.close < last.open){
+    return { direction:'short', tp: sma, sl: last.high, signalId: String(last.time || lastIdx), patternKey:'G' };
+  }
+  return null;
+}
+
+function backtestPatternG(candles){
+  const minLen = BB_PERIOD+2;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternG(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'G', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -1106,6 +1158,9 @@ function patternDefs(){
     { key:'E', timeframe: AT.TIMEFRAME_E || AT.TIMEFRAME,
       detect: detectPatternE,
       backtest: backtestPatternE },
+    { key:'G', timeframe: AT.TIMEFRAME_G || AT.TIMEFRAME,
+      detect: detectPatternG,
+      backtest: backtestPatternG },
   ];
 }
 

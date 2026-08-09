@@ -16,6 +16,11 @@ const CONFIG = {
   SYMBOL: 'BTCUSD',         // ローソク足に表示したいシンボル(ブローカーの銘柄名に合わせて変更)
   POLL_MS: 5000,            // 何msごとにMT5へ問い合わせるか(短すぎるとAPI制限に注意)
 
+  // 画面上に銘柄切り替えボタンを表示したい場合のみ設定する(カンマ区切り、
+  // または配列)。ボタンを押すとSYMBOL・AUTOTRADE.SYMBOLの両方が切り替わる。
+  // 未設定、または1つしか無い場合はボタンは表示されない。
+  // SYMBOL_CHOICES: 'USDJPY,BTCUSD',
+
   // MetaApiの取引用REST APIはブラウザからの直接アクセス(CORS)に対応していないため、
   // metaapi-proxy-worker.js をCloudflare Workersにデプロイし、発行されたURLをここに
   // 設定する(末尾のスラッシュは不要)。未設定の場合は直接アクセスを試みるが、

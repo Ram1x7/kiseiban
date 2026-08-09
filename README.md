@@ -52,6 +52,7 @@
    |---|---|---|
    | `METAAPI_REGION` | `new-york` | 口座を追加した地域(例: `london`) |
    | `SYMBOL` | `BTCUSD` | ローソク足に表示する銘柄 |
+   | `SYMBOL_CHOICES` | (未設定) | 画面上に銘柄切り替えボタンを表示したい場合のみ、カンマ区切りで設定(例: `USDJPY,BTCUSD`)。ボタンを押すと`SYMBOL`・`AUTOTRADE_SYMBOL`の両方がその場で切り替わり、次回開いた時も記憶されます。未設定、または1つしか無い場合はボタンは表示されません |
    | `POLL_MS` | `5000` | 何msごとにMT5へ問い合わせるか |
    | `AUTOTRADE_ENABLED` | `false` | `true`にすると自動売買のマスタースイッチがONになる(下記「3.」参照) |
    | `AUTOTRADE_SYMBOL` | `USDJPY` | 自動売買の対象銘柄 |

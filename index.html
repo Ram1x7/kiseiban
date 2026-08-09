@@ -177,6 +177,14 @@
   .at-btn:disabled{ opacity:0.4; cursor:not-allowed; }
   .at-btn:hover:not(:disabled){ border-color:var(--pink); }
   .at-backtest-result{ margin-top:8px; color:var(--txt); font-size:11px; line-height:1.7; white-space:pre-wrap; }
+  .symbol-row{ display:none; align-items:center; gap:8px; margin-bottom:8px; }
+  .symbol-row .k{ color:var(--txt-dim); font-size:9px; letter-spacing:1px; }
+  .symbol-btn{
+    background:var(--panel); border:1px solid var(--pink-dim); color:var(--txt-dim);
+    font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer; letter-spacing:0.5px;
+  }
+  .symbol-btn:hover{ border-color:var(--pink); color:var(--pink); }
+  .symbol-btn.active{ background:var(--green-dim); border-color:var(--green); color:var(--green); }
 </style>
 </head>
 <body>
@@ -202,6 +210,10 @@
   <div class="panel-title">
     <span>自動売買(複数パターンを並行判定・詳細はREADME参照) — 参考実装・利益を保証しません</span>
     <span class="badge" id="atModeBadge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">要MetaApi接続</span>
+  </div>
+  <div class="symbol-row" id="symbolRow">
+    <span class="k">対象銘柄</span>
+    <div id="symbolButtons"></div>
   </div>
   <div class="at-row">
     <label class="at-toggle">
@@ -344,6 +356,27 @@ if(!CONFIG.AUTOTRADE){
     MAX_OPEN_POSITIONS:1, MAX_DAILY_LOSS:50, PINBAR_WICK_MULT:1.5, PINBAR_WICK_RATIO:0.5, POLL_MS:30000,
   };
 }
+
+// Symbol switcher: CONFIG.SYMBOL_CHOICES may arrive as a comma-separated
+// string (from the hosted Worker's env var) or an array (local config.js).
+// Falls back to a single-choice list containing just the configured
+// SYMBOL, which keeps the switcher UI hidden when this isn't set up.
+if(typeof CONFIG.SYMBOL_CHOICES === 'string'){
+  CONFIG.SYMBOL_CHOICES = CONFIG.SYMBOL_CHOICES.split(',').map(s=>s.trim()).filter(Boolean);
+}
+if(!Array.isArray(CONFIG.SYMBOL_CHOICES) || CONFIG.SYMBOL_CHOICES.length === 0){
+  CONFIG.SYMBOL_CHOICES = [CONFIG.SYMBOL];
+}
+// Restore a previously chosen symbol (if still a valid choice) before any
+// data fetching begins, so the chart and autotrade both start on it.
+try{
+  const savedSymbol = localStorage.getItem('gravia_active_symbol');
+  if(savedSymbol && CONFIG.SYMBOL_CHOICES.includes(savedSymbol)){
+    CONFIG.SYMBOL = savedSymbol;
+    CONFIG.AUTOTRADE.SYMBOL = savedSymbol;
+  }
+}catch(e){ /* localStorage unavailable (e.g. private browsing) — ignore */ }
+
 const LIVE_MODE = !!(CONFIG.METAAPI_TOKEN && CONFIG.METAAPI_ACCOUNT_ID);
 const API_BASE = `https://mt-client-api-v1.${CONFIG.METAAPI_REGION}.agiliumtrade.ai`;
 const MARKET_DATA_BASE = `https://mt-market-data-client-api-v1.${CONFIG.METAAPI_REGION}.agiliumtrade.ai`;
@@ -1364,6 +1397,45 @@ async function autotradeTick(){
   }
 }
 
+// =========================================================
+// SYMBOL SWITCHER — lets the user flip which symbol the chart and
+// autotrade engine both target (e.g. USDJPY on weekdays, BTCUSD over the
+// weekend) without editing Cloudflare Worker settings each time. Only
+// shown when CONFIG.SYMBOL_CHOICES has more than one entry (set via the
+// Worker's SYMBOL_CHOICES variable, or CONFIG.SYMBOL_CHOICES in config.js).
+// =========================================================
+function persistSymbolChoice(sym){
+  try{ localStorage.setItem('gravia_active_symbol', sym); }catch(e){ /* localStorage unavailable — ignore */ }
+}
+
+function renderSymbolButtons(){
+  const container = document.getElementById('symbolButtons');
+  container.innerHTML = CONFIG.SYMBOL_CHOICES.map(sym =>
+    `<button class="symbol-btn${sym===CONFIG.SYMBOL ? ' active' : ''}" data-symbol="${sym}">${sym}</button>`
+  ).join('');
+  container.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=> switchSymbol(btn.dataset.symbol));
+  });
+}
+
+function switchSymbol(sym){
+  if(sym === CONFIG.SYMBOL) return;
+  CONFIG.SYMBOL = sym;
+  CONFIG.AUTOTRADE.SYMBOL = sym; // AT references CONFIG.AUTOTRADE, so this updates AT.SYMBOL too
+  persistSymbolChoice(sym);
+  renderSymbolButtons();
+  document.querySelectorAll('.price-tag').forEach(el=> el.textContent = CONFIG.SYMBOL);
+  atLog('SIG', `対象銘柄を${sym}に切り替えました。`);
+  if(LIVE_MODE) liveTick();
+}
+
+function initSymbolSwitcher(){
+  if(CONFIG.SYMBOL_CHOICES.length > 1){
+    document.getElementById('symbolRow').style.display = 'flex';
+    renderSymbolButtons();
+  }
+}
+
 function initAutotradeUI(){
   const toggle = document.getElementById('atEnableToggle');
   const badge = document.getElementById('atModeBadge');
@@ -1698,6 +1770,7 @@ function renderAll(){
 // ---------- Main loop ----------
 initNodes();
 initAutotradeUI();
+initSymbolSwitcher();
 
 if(LIVE_MODE){
   document.querySelectorAll('.sub').forEach(el=> el.innerHTML = '<span class="live-dot"></span>LIVE · MT5');

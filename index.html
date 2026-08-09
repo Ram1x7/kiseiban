@@ -193,7 +193,7 @@
   <div class="brand">
     <div class="logo">G</div>
     <div>
-      <div class="name">GRAVIA <span style="color:var(--txt-dim); font-weight:400;">· BTC/POLYMARKET</span></div>
+      <div class="name">GRAVIA <span id="brandSymbol" style="color:var(--txt-dim); font-weight:400;">· BTC/POLYMARKET</span></div>
       <div class="sub"><span class="live-dot"></span>LIVE · SIMULATED</div>
     </div>
   </div>
@@ -250,7 +250,7 @@
   <!-- Candle chart -->
   <div class="panel">
     <div class="panel-title">
-      <span>BTC/USD · OPTIONS CHAIN</span>
+      <span id="chartSymbolLabel">BTC/USD · CHART</span>
       <span id="cPrice" class="price-now">$0.00</span>
     </div>
     <canvas id="candles"></canvas>
@@ -1418,13 +1418,24 @@ function renderSymbolButtons(){
   });
 }
 
+// Every place in the UI that names the current symbol (header, chart
+// panel title, the small tag under the chart) — kept in one place so
+// switchSymbol() and the initial LIVE_MODE setup both stay in sync.
+function updateSymbolLabels(){
+  document.querySelectorAll('.price-tag').forEach(el=> el.textContent = CONFIG.SYMBOL);
+  const brand = document.getElementById('brandSymbol');
+  if(brand) brand.textContent = `· ${CONFIG.SYMBOL}`;
+  const chartLabel = document.getElementById('chartSymbolLabel');
+  if(chartLabel) chartLabel.textContent = `${CONFIG.SYMBOL} · CHART`;
+}
+
 function switchSymbol(sym){
   if(sym === CONFIG.SYMBOL) return;
   CONFIG.SYMBOL = sym;
   CONFIG.AUTOTRADE.SYMBOL = sym; // AT references CONFIG.AUTOTRADE, so this updates AT.SYMBOL too
   persistSymbolChoice(sym);
   renderSymbolButtons();
-  document.querySelectorAll('.price-tag').forEach(el=> el.textContent = CONFIG.SYMBOL);
+  updateSymbolLabels();
   atLog('SIG', `対象銘柄を${sym}に切り替えました。`);
   if(LIVE_MODE) liveTick();
 }
@@ -1774,7 +1785,7 @@ initSymbolSwitcher();
 
 if(LIVE_MODE){
   document.querySelectorAll('.sub').forEach(el=> el.innerHTML = '<span class="live-dot"></span>LIVE · MT5');
-  document.querySelectorAll('.price-tag').forEach(el=> el.textContent = CONFIG.SYMBOL);
+  updateSymbolLabels();
   document.querySelector('.footer-note').textContent = 'GRAVIA DASHBOARD — MetaApi 経由の実データ(口座: ' + CONFIG.METAAPI_ACCOUNT_ID.slice(0,8) + '…)';
   liveTick();
   setInterval(liveTick, CONFIG.POLL_MS);

@@ -1194,9 +1194,10 @@ function backtestPatternH(candles){
 // PATTERN I — RSI scalping across a higher/lower timeframe pair.
 //   1) RSI(14) on the higher timeframe is above 50 (bullish) or below 50
 //      (bearish)
-//   2) RSI(14) on the lower timeframe agrees with that same side
-//   Only enters when both timeframes' RSI are on the same side of 50 —
-//   deliberately simple (the source material itself notes this is a
+//   2) RSI(14) on the lower timeframe just crossed to that same side
+//      (edge-triggered, not merely "currently past 50" — see the note
+//      inside detectPatternI() for why)
+//   Deliberately simple (the source material itself notes this is a
 //   low-confidence, simplicity-first pattern).
 // =========================================================
 const RSI_PERIOD = 14;
@@ -1234,16 +1235,28 @@ function detectPatternI(higherCandles, lowerCandles){
   const lowerRsi = rsiSeries(lowerCandles.map(c=>c.close), RSI_PERIOD);
   const hLast = higherRsi[higherRsi.length-1];
   const lLast = lowerRsi[lowerRsi.length-1];
-  if(hLast==null || lLast==null) return null;
+  const lPrev = lowerRsi[lowerRsi.length-2];
+  if(hLast==null || lLast==null || lPrev==null) return null;
 
   // RSI_THRESHOLD (default 50) lets this be made stricter than the
   // source material's plain "which side of 50" check — e.g. 60 requires
   // RSI>60/<40 on both timeframes instead of just >50/<50, cutting down
   // on low-conviction signals right at the midline.
   const threshold = AT.RSI_THRESHOLD || 50;
+
+  // Unlike the other patterns' event-based triggers (a touch, a cross, a
+  // breakout candle), "RSI is above/below 50" is a *state* that can stay
+  // true for many consecutive lower-timeframe candles throughout a whole
+  // trend. Requiring the lower-timeframe RSI to just now have crossed the
+  // threshold (rather than merely currently being past it) makes this a
+  // one-shot event like every other pattern, instead of re-firing (and
+  // re-entering, stacking correlated positions with near-identical SL)
+  // on every single candle for as long as the trend continues. The
+  // higher timeframe only needs to currently agree — its own candles
+  // close far less often, so it isn't the source of the repeat-fire.
   let direction = null;
-  if(hLast>threshold && lLast>threshold) direction = 'long';
-  else if(hLast<(100-threshold) && lLast<(100-threshold)) direction = 'short';
+  if(hLast>threshold && lLast>threshold && lPrev<=threshold) direction = 'long';
+  else if(hLast<(100-threshold) && lLast<(100-threshold) && lPrev>=(100-threshold)) direction = 'short';
   if(!direction) return null;
 
   const last = lowerCandles[lowerCandles.length-1];

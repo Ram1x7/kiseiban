@@ -279,7 +279,7 @@
 <!-- MicroFish -->
 <div class="panel microfish-wrap" style="position:relative;">
   <div class="mf-head panel-title">
-    <span>MICROFISH · BTC</span>
+    <span id="microfishSymbolLabel">MICROFISH · BTC</span>
     <span id="mfPnl" class="badge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">+$0.00</span>
   </div>
   <div class="legend">
@@ -1427,6 +1427,8 @@ function updateSymbolLabels(){
   if(brand) brand.textContent = `· ${CONFIG.SYMBOL}`;
   const chartLabel = document.getElementById('chartSymbolLabel');
   if(chartLabel) chartLabel.textContent = `${CONFIG.SYMBOL} · CHART`;
+  const mfLabel = document.getElementById('microfishSymbolLabel');
+  if(mfLabel) mfLabel.textContent = `MICROFISH · ${CONFIG.SYMBOL}`;
 }
 
 function switchSymbol(sym){
@@ -1436,6 +1438,7 @@ function switchSymbol(sym){
   persistSymbolChoice(sym);
   renderSymbolButtons();
   updateSymbolLabels();
+  renderAutotradeNote();
   atLog('SIG', `対象銘柄を${sym}に切り替えました。`);
   if(LIVE_MODE) liveTick();
 }
@@ -1447,12 +1450,12 @@ function initSymbolSwitcher(){
   }
 }
 
-function initAutotradeUI(){
-  const toggle = document.getElementById('atEnableToggle');
+// Re-rendered on init and whenever switchSymbol() changes AT.SYMBOL, so
+// the "対象: ..." text never goes stale after a symbol switch.
+function renderAutotradeNote(){
   const badge = document.getElementById('atModeBadge');
   const note = document.getElementById('atNote');
   const canArm = LIVE_MODE && AT.ENABLED;
-  toggle.disabled = !canArm;
   if(canArm){
     badge.textContent = '接続中';
     badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)'; badge.style.borderColor = 'var(--green)';
@@ -1463,6 +1466,13 @@ function initAutotradeUI(){
   } else {
     note.textContent = 'AUTOTRADE.ENABLEDがfalseのため無効化されています。有効にするには設定(config.js、またはホスト先WorkerのAUTOTRADE_ENABLED変数)を編集してください。';
   }
+}
+
+function initAutotradeUI(){
+  const toggle = document.getElementById('atEnableToggle');
+  const canArm = LIVE_MODE && AT.ENABLED;
+  toggle.disabled = !canArm;
+  renderAutotradeNote();
   toggle.addEventListener('change', (e)=>{
     atState.enabled = e.target.checked;
     atLog('SIG', `自動売買を${atState.enabled?'ON':'OFF'}にしました。`);

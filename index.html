@@ -1220,44 +1220,53 @@ function updateAutotradeUI(){
 // autotradeTick() and runBacktest() both iterate this list instead of
 // hard-coding each pattern, so multiple patterns on different timeframes
 // can all be evaluated — and can all fire — in the same tick.
-const CANDLE_FETCH_LIMIT = 300; // generous enough to seed longer-period indicators (e.g. a 200-period EMA)
+// Each pattern's minLen is how many candles its detect() function needs at
+// minimum (matching the same check inside that function). Used to fetch
+// only as many candles as a timeframe's patterns actually require, rather
+// than a single blanket amount for every timeframe — fetching hundreds of
+// unneeded candles for fast timeframes made MetaApi noticeably slower to
+// respond and occasionally timed out (HTTP 504) once pattern F's 200-period
+// EMA pushed the shared limit up to 300 for every timeframe, including ones
+// that only ever needed ~20-30.
+const CANDLE_FETCH_MARGIN = 50; // safety buffer added on top of each pattern's minLen
 function patternDefs(){
   return [
-    { key:'A', timeframe: AT.TIMEFRAME_A || AT.TIMEFRAME,
+    { key:'A', timeframe: AT.TIMEFRAME_A || AT.TIMEFRAME, minLen: 10+5,
       detect: (candles)=>detectSignal(candles, 10, 'A'),
       backtest: (candles)=>backtestSignals(candles, 10, 'A') },
-    { key:'B', timeframe: AT.TIMEFRAME_B || AT.TIMEFRAME,
+    { key:'B', timeframe: AT.TIMEFRAME_B || AT.TIMEFRAME, minLen: 20+5,
       detect: (candles)=>detectSignal(candles, 20, 'B'),
       backtest: (candles)=>backtestSignals(candles, 20, 'B') },
-    { key:'C', timeframe: AT.TIMEFRAME_C || AT.TIMEFRAME,
+    { key:'C', timeframe: AT.TIMEFRAME_C || AT.TIMEFRAME, minLen: ICT_SWING_LOOKBACK+ICT_DISPLACEMENT_MAX_BARS+ICT_OB_LOOKBACK+3,
       detect: (candles)=>detectICTSignal(candles, 'C'),
       backtest: (candles)=>backtestICTSignals(candles, 'C') },
-    { key:'D', timeframe: AT.TIMEFRAME_D || '4h',
+    { key:'D', timeframe: AT.TIMEFRAME_D || '4h', minLen: PATTERN_D_EMA_PERIOD+TREND_SLOPE_LOOKBACK+PULLBACK_MIN_BARS+2,
       detect: detectPatternD,
       backtest: backtestPatternD },
-    { key:'F', timeframe: AT.TIMEFRAME_F || '4h',
+    { key:'F', timeframe: AT.TIMEFRAME_F || '4h', minLen: PATTERN_F_EMA_PERIOD+TREND_SLOPE_LOOKBACK+PULLBACK_MIN_BARS+2,
       detect: detectPatternF,
       backtest: backtestPatternF },
-    { key:'E', timeframe: AT.TIMEFRAME_E || AT.TIMEFRAME,
+    { key:'E', timeframe: AT.TIMEFRAME_E || AT.TIMEFRAME, minLen: DOW_PIVOT_WING*2+10,
       detect: detectPatternE,
       backtest: backtestPatternE },
-    { key:'G', timeframe: AT.TIMEFRAME_G || AT.TIMEFRAME,
+    { key:'G', timeframe: AT.TIMEFRAME_G || AT.TIMEFRAME, minLen: BB_PERIOD+2,
       detect: detectPatternG,
       backtest: backtestPatternG },
-    { key:'H', timeframe: AT.TIMEFRAME_H || AT.TIMEFRAME,
+    { key:'H', timeframe: AT.TIMEFRAME_H || AT.TIMEFRAME, minLen: DOW_PIVOT_WING*2+10,
       detect: detectPatternH,
       backtest: backtestPatternH },
   ];
 }
 
-// Fetches one candle batch per distinct timeframe used across all patterns
-// (so patterns sharing a timeframe don't trigger redundant API calls).
-async function fetchCandlesByTimeframe(timeframes, limit){
+// Fetches one candle batch per distinct timeframe (so patterns sharing a
+// timeframe don't trigger redundant API calls). `timeframeLimits` is an
+// array of {timeframe, limit} pairs.
+async function fetchCandlesByTimeframe(timeframeLimits){
   const cbase = `${MARKET_DATA_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
   const candlesByTf = {};
-  for(const tf of timeframes){
-    const raw = await metaApiFetch(`${cbase}/historical-market-data/symbols/${AT.SYMBOL}/timeframes/${tf}/candles?limit=${limit}`);
-    candlesByTf[tf] = (raw||[]).map(c=>({ open:c.open, high:c.high, low:c.low, close:c.close, time:c.time }));
+  for(const {timeframe, limit} of timeframeLimits){
+    const raw = await metaApiFetch(`${cbase}/historical-market-data/symbols/${AT.SYMBOL}/timeframes/${timeframe}/candles?limit=${limit}`);
+    candlesByTf[timeframe] = (raw||[]).map(c=>({ open:c.open, high:c.high, low:c.low, close:c.close, time:c.time }));
   }
   return candlesByTf;
 }
@@ -1283,8 +1292,13 @@ async function autotradeTick(){
     atState.dailyLossHit = false;
 
     const defs = patternDefs();
-    const timeframes = [...new Set(defs.map(d=>d.timeframe))];
-    const candlesByTf = await fetchCandlesByTimeframe(timeframes, CANDLE_FETCH_LIMIT);
+    const limitByTf = {};
+    for(const d of defs){
+      const needed = Math.min(d.minLen + CANDLE_FETCH_MARGIN, 500);
+      if(!limitByTf[d.timeframe] || limitByTf[d.timeframe] < needed) limitByTf[d.timeframe] = needed;
+    }
+    const timeframeLimits = Object.entries(limitByTf).map(([timeframe, limit]) => ({ timeframe, limit }));
+    const candlesByTf = await fetchCandlesByTimeframe(timeframeLimits);
 
     const signals = [];
     for(const def of defs){
@@ -1389,7 +1403,7 @@ async function runBacktest(){
   try{
     const defs = patternDefs();
     const timeframes = [...new Set(defs.map(d=>d.timeframe))];
-    const candlesByTf = await fetchCandlesByTimeframe(timeframes, 1000);
+    const candlesByTf = await fetchCandlesByTimeframe(timeframes.map(timeframe => ({ timeframe, limit: 1000 })));
 
     const perPattern = defs.map(def=>{
       const candles = candlesByTf[def.timeframe] || [];

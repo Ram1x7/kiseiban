@@ -155,6 +155,10 @@ async function handleDashboard(reqUrl, env) {
       TIMEFRAME_E: env.AUTOTRADE_TIMEFRAME_E || undefined,
       TIMEFRAME_G: env.AUTOTRADE_TIMEFRAME_G || undefined,
       TIMEFRAME_H: env.AUTOTRADE_TIMEFRAME_H || undefined,
+      // Pattern I is the first multi-timeframe pattern, so it has two
+      // independent timeframe overrides instead of one.
+      TIMEFRAME_I_HIGH: env.AUTOTRADE_TIMEFRAME_I_HIGH || undefined,
+      TIMEFRAME_I_LOW: env.AUTOTRADE_TIMEFRAME_I_LOW || undefined,
     },
   };
 

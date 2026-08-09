@@ -117,6 +117,7 @@
   .legend{ display:flex; gap:12px; position:absolute; left:12px; top:30px; font-size:9px; color:var(--txt-dim); z-index:2; }
   .legend span{ display:flex; align-items:center; gap:4px; margin-bottom:5px; }
   .dot{ width:6px; height:6px; border-radius:50%; display:inline-block; }
+  .mf-note{ position:absolute; left:12px; top:46px; font-size:8px; color:var(--txt-dim); z-index:2; opacity:0.7; }
   canvas#microfish{ width:100%; height:230px; display:block; }
   .mf-stats{ position:absolute; right:12px; top:30px; text-align:right; font-size:9px; color:var(--txt-dim); z-index:2; }
   .mf-stats b{ color:#fff; font-size:11px; }
@@ -288,16 +289,14 @@
     <span id="mfPnl" class="badge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">+$0.00</span>
   </div>
   <div class="legend">
-    <span><i class="dot" style="background:var(--pink)"></i>BEAR</span>
-    <span><i class="dot" style="background:var(--green)"></i>BULL</span>
-    <span><i class="dot" style="background:#8fa3ff"></i>MEDIAN</span>
-    <span><i class="dot" style="background:var(--amber)"></i>CATALYST</span>
-    <span><i class="dot" style="background:#ffffff88"></i>CLUSTER</span>
+    <span><i class="dot" style="background:var(--pink)"></i>BEAR(陰線/負け/含み損)</span>
+    <span><i class="dot" style="background:var(--green)"></i>BULL(陽線/勝ち/含み益)</span>
   </div>
+  <div class="mf-note">小=直近ローソク足 / 大=保有中ポジション / 残り続ける点=過去の約定</div>
   <div class="mf-stats">
-    <div><b id="mfConf">95.5%</b> CONF</div>
-    <div id="mfNodes">1,209 NODES</div>
-    <div id="mfLinks">653 LINKS</div>
+    <div><b id="mfConf">100.0%</b> WIN%</div>
+    <div id="mfNodes">0 NODES</div>
+    <div id="mfLinks">0 LINKS</div>
   </div>
   <canvas id="microfish"></canvas>
 </div>
@@ -405,6 +404,11 @@ const state = {
   sellVols: [],
   buyVols: [],
   nodes: null,
+  // Persistent MicroFish dots for each closed trade this bot placed (see
+  // pushTradeNode()) — win trades stay green, loss trades stay pink,
+  // forever (until the 40-node cap ages the oldest ones out), unlike the
+  // candle/position dots which are recomputed fresh every render.
+  tradeNodes: [],
   positions: [],
 };
 
@@ -460,6 +464,7 @@ function simulateTick(){
 
     // log line
     pushLog(win, state.price, pnlTrade);
+    pushTradeNode(win, pnlTrade);
 
     // volumes
     state.sellVols.push(rnd(2,60));
@@ -475,6 +480,21 @@ let tradesTableRows = [];
 function pushTradeRow(t){
   tradesTableRows.unshift(t);
   if(tradesTableRows.length > 7) tradesTableRows.pop();
+}
+
+// One persistent MicroFish dot per closed trade — win stays green, loss
+// stays pink, and it keeps drifting (via driftNodes()) rather than being
+// recomputed from scratch on every render, unlike the candle/position
+// dots in drawMicrofish(). Capped so the panel doesn't accumulate an
+// unbounded number of dots over a long session.
+function pushTradeNode(win, pnl){
+  state.tradeNodes.push({
+    x: rnd(0.05,0.95), y: rnd(0.1,0.9),
+    r: Math.min(3 + Math.sqrt(Math.abs(pnl))*1.2, 13),
+    color: win ? '#28ffb0' : '#ff2e88',
+    vx: rnd(-0.0006,0.0006), vy: rnd(-0.0004,0.0004), pulse: rnd(0,Math.PI*2),
+  });
+  if(state.tradeNodes.length > 40) state.tradeNodes.shift();
 }
 
 const logMessages = [
@@ -609,6 +629,7 @@ function mapLiveDataToState(data){
     const row = { price: d.price, winPct, pnl: d.profit };
     pushTradeRow(row);
     pushLog(d.profit > 0, d.price, d.profit);
+    pushTradeNode(d.profit > 0, d.profit);
     if(d.type === 'DEAL_TYPE_SELL'){ state.sellVols.push(d.volume); if(state.sellVols.length>28) state.sellVols.shift(); }
     else { state.buyVols.push(d.volume); if(state.buyVols.length>28) state.buyVols.shift(); }
   });
@@ -620,7 +641,7 @@ async function liveTick(){
   try{
     const data = await fetchLiveData();
     mapLiveDataToState(data);
-    driftNodes(); // MicroFish stays a decorative sentiment visual — MT5 has no equivalent clustering data
+    driftNodes(); // drifts the persistent per-trade MicroFish dots (state.tradeNodes) between renders
     renderAll();
   }catch(err){
     console.error('Gravia live data error:', err);
@@ -1997,36 +2018,65 @@ async function runBacktest(){
   }
 }
 
-// ---------- MicroFish nodes (init once, drift over time) ----------
+// ---------- MicroFish nodes ----------
+// Three kinds of dots, all tied to real data (see the redesign note in
+// drawMicrofish()): recent candles and open positions are recomputed
+// fresh every render (their "position" IS the current data), while
+// state.tradeNodes (one persistent dot per closed trade, added by
+// pushTradeNode()) keeps drifting between renders like the original
+// purely-decorative version did.
 function initNodes(){
-  const types = [
-    {k:'bear', color:'#ff2e88', w:5},
-    {k:'bull', color:'#28ffb0', w:5},
-    {k:'median', color:'#8fa3ff', w:3},
-    {k:'catalyst', color:'#ffcc55', w:2},
-    {k:'cluster', color:'#ffffff88', w:2},
-  ];
-  const nodes = [];
-  for(let i=0;i<70;i++){
-    const t = choice(types);
-    nodes.push({
-      x: rnd(0.05,0.95),
-      y: rnd(0.1,0.9),
-      r: rnd(1.5, t.k==='cluster'? 14: 5),
-      color: t.color,
-      vx: rnd(-0.0006,0.0006),
-      vy: rnd(-0.0004,0.0004),
-      pulse: rnd(0,Math.PI*2)
-    });
-  }
-  state.nodes = nodes;
+  state.nodes = [];
+  state.tradeNodes = [];
 }
 
 function driftNodes(){
-  state.nodes.forEach(n=>{
+  state.tradeNodes.forEach(n=>{
     n.x += n.vx; n.y += n.vy; n.pulse += 0.05;
     if(n.x<0.02||n.x>0.98) n.vx *= -1;
     if(n.y<0.05||n.y>0.95) n.vy *= -1;
+  });
+}
+
+// Recent candles (up to 26) plotted like a miniature price chart: x by
+// index, y by where the close sits within the visible high/low range
+// (so it echoes the real candlestick panel's shape), color by candle
+// direction, size by that candle's range relative to the average.
+function computeCandleNodes(){
+  const candles = state.candles || [];
+  if(candles.length === 0) return [];
+  const rangeMax = Math.max(...candles.map(c=>c.high));
+  const rangeMin = Math.min(...candles.map(c=>c.low));
+  const span = Math.max(rangeMax-rangeMin, 1e-9);
+  const avgRange = candles.reduce((s,c)=>s+(c.high-c.low),0)/candles.length || 1;
+  return candles.map((c,i)=>{
+    const bull = c.close >= c.open;
+    const yNorm = 1 - ((c.close-rangeMin)/span);
+    return {
+      x: candles.length>1 ? 0.06 + (i/(candles.length-1))*0.88 : 0.5,
+      y: 0.1 + yNorm*0.8,
+      r: Math.min(2 + ((c.high-c.low)/avgRange)*3, 9),
+      color: bull ? '#28ffb0' : '#ff2e88',
+      pulse: i*0.7,
+    };
+  });
+}
+
+// Currently open positions as larger, brighter dots — green while
+// floating in profit, pink while floating at a loss. Empty outside LIVE
+// mode (simulation never opens real positions).
+function computePositionNodes(){
+  const positions = state.positions || [];
+  if(positions.length === 0) return [];
+  return positions.map((p,i)=>{
+    const profit = typeof p.profit === 'number' ? p.profit : 0;
+    return {
+      x: positions.length>1 ? 0.15 + (i/(positions.length-1))*0.7 : 0.5,
+      y: 0.5,
+      r: Math.min(10 + Math.sqrt(Math.abs(profit))*1.5, 20),
+      color: profit >= 0 ? '#28ffb0' : '#ff2e88',
+      pulse: i*1.3,
+    };
   });
 }
 
@@ -2114,20 +2164,27 @@ function drawStreakBar(){
   }
 }
 
+// MicroFish is a real-data visualization, not decoration: dots for the
+// visible candles (mini price-shape echo), currently open positions
+// (bright, floating profit/loss), and every closed trade this bot has
+// placed (persistent, from state.tradeNodes) — win stays green, loss
+// stays pink. Connecting lines between nearby dots are still purely
+// cosmetic (no meaning to the distance itself).
 function drawMicrofish(){
   const cv = document.getElementById('microfish');
   const c = hidpiCanvas(cv); if(!c) return;
   const {ctx,w,h} = c;
   ctx.clearRect(0,0,w,h);
-  // faint connecting lines for nearby nodes
-  const pts = state.nodes;
+  const pts = [...computeCandleNodes(), ...computePositionNodes(), ...state.tradeNodes];
   ctx.lineWidth = 0.5;
+  let linkCount = 0;
   for(let i=0;i<pts.length;i++){
     for(let j=i+1;j<pts.length;j++){
       const a=pts[i], b=pts[j];
       const dx=(a.x-b.x)*w, dy=(a.y-b.y)*h;
       const d = Math.sqrt(dx*dx+dy*dy);
       if(d < 55){
+        linkCount++;
         ctx.strokeStyle = 'rgba(150,160,200,'+(0.08*(1-d/55))+')';
         ctx.beginPath(); ctx.moveTo(a.x*w,a.y*h); ctx.lineTo(b.x*w,b.y*h); ctx.stroke();
       }
@@ -2142,6 +2199,12 @@ function drawMicrofish(){
     ctx.fill();
     ctx.globalAlpha = 1;
   });
+
+  // mf-stats: real counts instead of the old static placeholder numbers.
+  document.getElementById('mfNodes').textContent = `${pts.length} NODES`;
+  document.getElementById('mfLinks').textContent = `${linkCount} LINKS`;
+  const winPct = state.trades ? (state.wins/state.trades*100) : 100;
+  document.getElementById('mfConf').textContent = `${fmt(winPct,1)}%`;
 }
 
 function drawEquityCurve(){

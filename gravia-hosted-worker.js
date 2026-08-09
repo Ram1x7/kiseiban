@@ -142,6 +142,12 @@ async function handleDashboard(reqUrl, env) {
       MAX_DAILY_LOSS: numOr(env.AUTOTRADE_MAX_DAILY_LOSS, 50),
       PINBAR_WICK_MULT: numOr(env.AUTOTRADE_PINBAR_WICK_MULT, 1.5),
       PINBAR_WICK_RATIO: numOr(env.AUTOTRADE_PINBAR_WICK_RATIO, 0.5),
+      // Pattern I (RSI scalping) entry threshold: RSI must be above this
+      // (both timeframes) for LONG, or below (100 - this) for SHORT.
+      // Default 50 matches the source material's plain "which side of 50"
+      // check; raising it (e.g. 60) requires a stronger RSI reading before
+      // entering, cutting down on low-conviction signals near the midline.
+      RSI_THRESHOLD: numOr(env.AUTOTRADE_RSI_THRESHOLD, 50),
       POLL_MS: numOr(env.AUTOTRADE_POLL_MS, 30000),
       // Optional per-pattern timeframe overrides (each falls back to
       // TIMEFRAME above if unset on this Worker). Undefined keys are

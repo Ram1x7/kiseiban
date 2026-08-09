@@ -354,8 +354,10 @@ if(!CONFIG.AUTOTRADE){
   CONFIG.AUTOTRADE = {
     ENABLED:false, SYMBOL:'USDJPY', TIMEFRAME:'4h', LOT_SIZE:0.01, LOOKBACK_BARS:20,
     MAX_OPEN_POSITIONS:1, MAX_DAILY_LOSS:50, PINBAR_WICK_MULT:1.5, PINBAR_WICK_RATIO:0.5, POLL_MS:30000,
+    RSI_THRESHOLD:50,
   };
 }
+if(CONFIG.AUTOTRADE && CONFIG.AUTOTRADE.RSI_THRESHOLD == null) CONFIG.AUTOTRADE.RSI_THRESHOLD = 50;
 
 // Symbol switcher: CONFIG.SYMBOL_CHOICES may arrive as a comma-separated
 // string (from the hosted Worker's env var) or an array (local config.js).
@@ -1234,9 +1236,14 @@ function detectPatternI(higherCandles, lowerCandles){
   const lLast = lowerRsi[lowerRsi.length-1];
   if(hLast==null || lLast==null) return null;
 
+  // RSI_THRESHOLD (default 50) lets this be made stricter than the
+  // source material's plain "which side of 50" check — e.g. 60 requires
+  // RSI>60/<40 on both timeframes instead of just >50/<50, cutting down
+  // on low-conviction signals right at the midline.
+  const threshold = AT.RSI_THRESHOLD || 50;
   let direction = null;
-  if(hLast>50 && lLast>50) direction = 'long';
-  else if(hLast<50 && lLast<50) direction = 'short';
+  if(hLast>threshold && lLast>threshold) direction = 'long';
+  else if(hLast<(100-threshold) && lLast<(100-threshold)) direction = 'short';
   if(!direction) return null;
 
   const last = lowerCandles[lowerCandles.length-1];

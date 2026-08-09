@@ -1459,6 +1459,96 @@ function backtestPatternK(higherCandles, lowerCandles){
   return results;
 }
 
+// =========================================================
+// PATTERN L — EMA10/20/50 + Bollinger Band width + MACD.
+//   1) Higher-timeframe direction: MACD line above zero (up) or below
+//      zero (down)
+//   2) Lower-timeframe Bollinger Band width (±2σ) must be at least
+//      PATTERN_L_BBW_MIN — a volatility filter, only trade when the
+//      market is moving enough to matter
+//   3) Entry: EMA10 crosses EMA50 on the lower timeframe, in agreement
+//      with the higher-timeframe direction
+// The source material's exit rule ("close when EMA10 crosses EMA20") is,
+// like patterns J/K, a dynamic position-management behavior this bot
+// doesn't implement — TP/SL are derived from the recent lookback range
+// instead, consistent with every other pattern.
+//
+// Note on PATTERN_L_BBW_MIN: the source material's examples measure this
+// width in raw price units on JPY pairs (price ~100-150), where 0.2-0.4
+// is a meaningful move. That absolute threshold does not automatically
+// scale to very differently priced symbols (e.g. it would almost never
+// trigger on EURUSD's ~1.0-1.2 range, and would be trivially exceeded on
+// BTCUSD's much larger price scale). Kept as-written from the source
+// rather than "fixed" into a symbol-relative version, since that would be
+// a different rule than what was actually described.
+// =========================================================
+const PATTERN_L_EMA_FAST = 10;
+const PATTERN_L_EMA_MID = 20; // unused by entry/exit here (matches the source's exit-only role) — kept for documentation
+const PATTERN_L_EMA_SLOW = 50;
+const PATTERN_L_BBW_MIN = 0.2;
+
+// Checks whether the LATEST candle of the lower-timeframe series is a
+// live, actionable entry right now, given the higher-timeframe direction.
+// Also used for backtesting via timestamp-aligned prefixes (see
+// backtestPatternL), same approach as patterns I/K.
+function detectPatternL(higherCandles, lowerCandles){
+  const minLenHigher = MACD_SLOW+MACD_SIGNAL+5;
+  const minLenLower = Math.max(PATTERN_L_EMA_SLOW, BB_PERIOD)+5;
+  if(higherCandles.length < minLenHigher || lowerCandles.length < minLenLower) return null;
+
+  const { macdLine: higherMacd } = macdSeries(higherCandles.map(c=>c.close), MACD_FAST, MACD_SLOW, MACD_SIGNAL);
+  const hLast = higherMacd[higherMacd.length-1];
+  if(hLast==null) return null;
+  const higherTrendUp = hLast>0, higherTrendDown = hLast<0;
+  if(!higherTrendUp && !higherTrendDown) return null;
+
+  const lastIdx = lowerCandles.length-1;
+  const lowerCloses = lowerCandles.map(c=>c.close);
+  const window = lowerCloses.slice(lastIdx-BB_PERIOD+1, lastIdx+1);
+  const sd = stddev(window);
+  const width = 2*2*sd; // (sma+2sd) - (sma-2sd)
+  if(width < PATTERN_L_BBW_MIN) return null;
+
+  const ema10 = emaSeries(lowerCloses, PATTERN_L_EMA_FAST);
+  const ema50 = emaSeries(lowerCloses, PATTERN_L_EMA_SLOW);
+  const e10_0 = ema10[lastIdx-1], e10_1 = ema10[lastIdx], e50_0 = ema50[lastIdx-1], e50_1 = ema50[lastIdx];
+  if(e10_0==null || e10_1==null || e50_0==null || e50_1==null) return null;
+  const goldenCross = e10_0<=e50_0 && e10_1>e50_1;
+  const deadCross = e10_0>=e50_0 && e10_1<e50_1;
+
+  const last = lowerCandles[lastIdx];
+  const signalId = String(last.time || lastIdx);
+  const lookback = lowerCandles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
+
+  if(higherTrendUp && goldenCross){
+    const tp = Math.max(...lookback.map(c=>c.high));
+    const sl = Math.min(...lookback.map(c=>c.low));
+    return { direction:'long', tp, sl, signalId, patternKey:'L' };
+  }
+  if(higherTrendDown && deadCross){
+    const tp = Math.min(...lookback.map(c=>c.low));
+    const sl = Math.max(...lookback.map(c=>c.high));
+    return { direction:'short', tp, sl, signalId, patternKey:'L' };
+  }
+  return null;
+}
+
+function backtestPatternL(higherCandles, lowerCandles){
+  const minLenHigher = MACD_SLOW+MACD_SIGNAL+5;
+  const minLenLower = Math.max(PATTERN_L_EMA_SLOW, BB_PERIOD)+5;
+  if(higherCandles.length < minLenHigher || lowerCandles.length < minLenLower) return [];
+  const results = [];
+  let higherIdx = 0;
+  for(let i=minLenLower-1; i<lowerCandles.length; i++){
+    const lowerTime = new Date(lowerCandles[i].time).getTime();
+    while(higherIdx+1 < higherCandles.length && new Date(higherCandles[higherIdx+1].time).getTime() <= lowerTime) higherIdx++;
+    if(higherIdx < minLenHigher-1) continue;
+    const sig = detectPatternL(higherCandles.slice(0, higherIdx+1), lowerCandles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'L', time: lowerCandles[i].time, index: i });
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -1575,6 +1665,10 @@ function patternDefs(){
       minLen: { higher: BB_PERIOD+5, lower: Math.max(BB_PERIOD, MACD_SLOW+MACD_SIGNAL)+5 },
       detect: (byTf)=>detectPatternK(byTf.higher, byTf.lower),
       backtest: (byTf)=>backtestPatternK(byTf.higher, byTf.lower) },
+    { key:'L', timeframes: { higher: AT.TIMEFRAME_L_HIGH || '1h', lower: AT.TIMEFRAME_L_LOW || '15m' },
+      minLen: { higher: MACD_SLOW+MACD_SIGNAL+5, lower: Math.max(PATTERN_L_EMA_SLOW, BB_PERIOD)+5 },
+      detect: (byTf)=>detectPatternL(byTf.higher, byTf.lower),
+      backtest: (byTf)=>backtestPatternL(byTf.higher, byTf.lower) },
   ];
 }
 

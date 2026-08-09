@@ -53,11 +53,13 @@ const CONFIG = {
     // TIMEFRAME_E: '4h',
     // TIMEFRAME_G: '15m',
     // TIMEFRAME_H: '4h',
-    // パターンI/Kのみ、上位足・下位足の2つを個別に持つ(未設定時のデフォルトは以下の通り)。
+    // パターンI/K/Lのみ、上位足・下位足の2つを個別に持つ(未設定時のデフォルトは以下の通り)。
     // TIMEFRAME_I_HIGH: '15m',
     // TIMEFRAME_I_LOW: '1m',
     // TIMEFRAME_J: '15m',
     // TIMEFRAME_K_HIGH: '15m',
     // TIMEFRAME_K_LOW: '1m',
+    // TIMEFRAME_L_HIGH: '1h',
+    // TIMEFRAME_L_LOW: '15m',
   },
 };

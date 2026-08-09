@@ -1380,6 +1380,85 @@ function backtestPatternJ(candles){
   return results;
 }
 
+// =========================================================
+// PATTERN K — Bollinger Band ±2σ reversal + MACD cross scalping.
+//   1) Higher-timeframe direction filter: latest close vs its own SMA20
+//   2) Lower-timeframe candle touches/pierces ±2σ AND closes back with a
+//      reversal-direction candle
+//   3) A MACD cross (on the lower timeframe) confirms the reversal
+//   4) Take-profit targets ±1σ (not ±2σ) — the source material specifically
+//      argues ±1σ is reached more reliably even though it's a smaller move
+//   5) Skipped if price has already reached/passed the ±1σ target at the
+//      moment of the cross (no room left to the target)
+//
+// Simplification from the source material: it also describes escalating
+// to successively higher timeframes if the lower timeframe never reverses
+// (e.g. check 1m, and if that never reverses, wait on 5m instead). That is
+// a persisted, multi-tick "still waiting" state that no pattern in this
+// tool tracks — every pattern here only ever asks "is the latest candle
+// actionable right now?" on each independent poll. This pattern keeps the
+// two-timeframe direction+trigger structure but drops that escalation.
+// =========================================================
+const PATTERN_K_TP_SIGMA = 1;
+
+// Checks whether the LATEST candle of the lower-timeframe series is a
+// live, actionable entry right now, given the higher-timeframe direction.
+// Also used for backtesting by calling it on timestamp-aligned prefixes of
+// both series (see backtestPatternK), same approach as pattern I.
+function detectPatternK(higherCandles, lowerCandles){
+  const minLenHigher = BB_PERIOD+5;
+  const minLenLower = Math.max(BB_PERIOD, MACD_SLOW+MACD_SIGNAL)+5;
+  if(higherCandles.length < minLenHigher || lowerCandles.length < minLenLower) return null;
+
+  const higherWindow = higherCandles.slice(-BB_PERIOD).map(c=>c.close);
+  const higherSma = higherWindow.reduce((a,b)=>a+b,0)/higherWindow.length;
+  const higherLast = higherCandles[higherCandles.length-1].close;
+  const higherTrendUp = higherLast > higherSma;
+  const higherTrendDown = higherLast < higherSma;
+  if(!higherTrendUp && !higherTrendDown) return null;
+
+  const lastIdx = lowerCandles.length-1;
+  const lowerCloses = lowerCandles.map(c=>c.close);
+  const window = lowerCloses.slice(lastIdx-BB_PERIOD+1, lastIdx+1);
+  const sma = window.reduce((a,b)=>a+b,0)/window.length;
+  const sd = stddev(window);
+  const upper2 = sma + 2*sd, lower2 = sma - 2*sd;
+  const upper1 = sma + PATTERN_K_TP_SIGMA*sd, lower1 = sma - PATTERN_K_TP_SIGMA*sd;
+
+  const { macdLine, signalLine } = macdSeries(lowerCloses, MACD_FAST, MACD_SLOW, MACD_SIGNAL);
+  const m0 = macdLine[lastIdx-1], m1 = macdLine[lastIdx], s0 = signalLine[lastIdx-1], s1 = signalLine[lastIdx];
+  if(m0==null || m1==null || s0==null || s1==null) return null;
+  const goldenCross = m0<=s0 && m1>s1;
+  const deadCross = m0>=s0 && m1<s1;
+
+  const last = lowerCandles[lastIdx];
+  const signalId = String(last.time || lastIdx);
+
+  if(higherTrendUp && last.low<=lower2 && last.close>last.open && goldenCross && last.close<lower1){
+    return { direction:'long', tp:lower1, sl:last.low, signalId, patternKey:'K' };
+  }
+  if(higherTrendDown && last.high>=upper2 && last.close<last.open && deadCross && last.close>upper1){
+    return { direction:'short', tp:upper1, sl:last.high, signalId, patternKey:'K' };
+  }
+  return null;
+}
+
+function backtestPatternK(higherCandles, lowerCandles){
+  const minLenHigher = BB_PERIOD+5;
+  const minLenLower = Math.max(BB_PERIOD, MACD_SLOW+MACD_SIGNAL)+5;
+  if(higherCandles.length < minLenHigher || lowerCandles.length < minLenLower) return [];
+  const results = [];
+  let higherIdx = 0;
+  for(let i=minLenLower-1; i<lowerCandles.length; i++){
+    const lowerTime = new Date(lowerCandles[i].time).getTime();
+    while(higherIdx+1 < higherCandles.length && new Date(higherCandles[higherIdx+1].time).getTime() <= lowerTime) higherIdx++;
+    if(higherIdx < minLenHigher-1) continue;
+    const sig = detectPatternK(higherCandles.slice(0, higherIdx+1), lowerCandles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'K', time: lowerCandles[i].time, index: i });
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -1492,6 +1571,10 @@ function patternDefs(){
       minLen: { main: Math.max(ICHIMOKU_SENKOU_B+ICHIMOKU_DISPLACEMENT, MACD_SLOW+MACD_SIGNAL)+5 },
       detect: (byTf)=>detectPatternJ(byTf.main),
       backtest: (byTf)=>backtestPatternJ(byTf.main) },
+    { key:'K', timeframes: { higher: AT.TIMEFRAME_K_HIGH || '15m', lower: AT.TIMEFRAME_K_LOW || '1m' },
+      minLen: { higher: BB_PERIOD+5, lower: Math.max(BB_PERIOD, MACD_SLOW+MACD_SIGNAL)+5 },
+      detect: (byTf)=>detectPatternK(byTf.higher, byTf.lower),
+      backtest: (byTf)=>backtestPatternK(byTf.higher, byTf.lower) },
   ];
 }
 

@@ -56,5 +56,6 @@ const CONFIG = {
     // パターンIのみ、上位足・下位足の2つを個別に持つ(未設定時のデフォルトは以下の通り)。
     // TIMEFRAME_I_HIGH: '15m',
     // TIMEFRAME_I_LOW: '1m',
+    // TIMEFRAME_J: '15m',
   },
 };

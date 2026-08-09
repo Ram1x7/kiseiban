@@ -1267,6 +1267,119 @@ function backtestPatternI(higherCandles, lowerCandles){
   return results;
 }
 
+// =========================================================
+// PATTERN J — Ichimoku cloud + MACD cross.
+//   LONG:  close above the cloud, AND a MACD golden cross just happened
+//   SHORT: close below the cloud, AND a MACD dead cross just happened
+// The source material's exit rule ("close on the opposite MACD cross") is
+// a dynamic position-management behavior that no other pattern here does
+// either — this bot only ever places a market order with a fixed TP/SL at
+// entry — so, consistent with every other pattern, TP/SL are derived from
+// the recent lookback range instead of a dynamic exit signal.
+// =========================================================
+const ICHIMOKU_TENKAN = 9;
+const ICHIMOKU_KIJUN = 26;
+const ICHIMOKU_SENKOU_B = 52;
+const ICHIMOKU_DISPLACEMENT = 26;
+const MACD_FAST = 12;
+const MACD_SLOW = 26;
+const MACD_SIGNAL = 9;
+
+function donchianMid(highs, lows, period, idx){
+  if(idx < period-1) return null;
+  let hi = -Infinity, lo = Infinity;
+  for(let k=idx-period+1; k<=idx; k++){
+    if(highs[k] > hi) hi = highs[k];
+    if(lows[k] < lo) lo = lows[k];
+  }
+  return (hi+lo)/2;
+}
+
+// Returns the cloud (Senkou Span A/B) values actually VISIBLE at each
+// candle index — i.e. already shifted forward by `displacement`, matching
+// how the cloud is drawn on a real chart (today's cloud edge was computed
+// from data `displacement` bars ago).
+function ichimoku(candles, tenkanPeriod, kijunPeriod, senkouBPeriod, displacement){
+  const n = candles.length;
+  const highs = candles.map(c=>c.high), lows = candles.map(c=>c.low);
+  const tenkan = new Array(n).fill(null);
+  const kijun = new Array(n).fill(null);
+  const spanARaw = new Array(n).fill(null);
+  const spanBRaw = new Array(n).fill(null);
+  for(let i=0;i<n;i++){
+    tenkan[i] = donchianMid(highs, lows, tenkanPeriod, i);
+    kijun[i] = donchianMid(highs, lows, kijunPeriod, i);
+    if(tenkan[i]!=null && kijun[i]!=null) spanARaw[i] = (tenkan[i]+kijun[i])/2;
+    spanBRaw[i] = donchianMid(highs, lows, senkouBPeriod, i);
+  }
+  const spanA = new Array(n).fill(null), spanB = new Array(n).fill(null);
+  for(let i=0;i<n;i++){
+    const srcIdx = i - displacement;
+    if(srcIdx >= 0){ spanA[i] = spanARaw[srcIdx]; spanB[i] = spanBRaw[srcIdx]; }
+  }
+  return { tenkan, kijun, spanA, spanB };
+}
+
+// Standard MACD: fast EMA minus slow EMA, plus an EMA-of-that as the
+// signal line. Reuses emaSeries() (already used by patterns A/B/D/F).
+function macdSeries(closes, fast, slow, signalPeriod){
+  const emaFast = emaSeries(closes, fast);
+  const emaSlow = emaSeries(closes, slow);
+  const macdLine = closes.map((_,i)=> (emaFast[i]!=null && emaSlow[i]!=null) ? emaFast[i]-emaSlow[i] : null);
+  const validStart = macdLine.findIndex(v=>v!=null);
+  const signalLine = new Array(closes.length).fill(null);
+  if(validStart !== -1){
+    const emaOfMacd = emaSeries(macdLine.slice(validStart), signalPeriod);
+    for(let i=0;i<emaOfMacd.length;i++) signalLine[validStart+i] = emaOfMacd[i];
+  }
+  return { macdLine, signalLine };
+}
+
+// Checks whether the LATEST candle is a live, actionable entry right now.
+// Also used for backtesting by calling it repeatedly on growing prefixes
+// of the series — both Ichimoku and MACD only ever look backward from a
+// given index, so re-slicing gives identical values to reading the same
+// index out of one full-series computation.
+function detectPatternJ(candles){
+  const minLen = Math.max(ICHIMOKU_SENKOU_B+ICHIMOKU_DISPLACEMENT, MACD_SLOW+MACD_SIGNAL) + 5;
+  if(candles.length < minLen) return null;
+  const lastIdx = candles.length-1;
+
+  const { spanA, spanB } = ichimoku(candles, ICHIMOKU_TENKAN, ICHIMOKU_KIJUN, ICHIMOKU_SENKOU_B, ICHIMOKU_DISPLACEMENT);
+  const a = spanA[lastIdx], b = spanB[lastIdx];
+  if(a==null || b==null) return null;
+  const cloudTop = Math.max(a,b), cloudBottom = Math.min(a,b);
+
+  const closes = candles.map(c=>c.close);
+  const { macdLine, signalLine } = macdSeries(closes, MACD_FAST, MACD_SLOW, MACD_SIGNAL);
+  const m0 = macdLine[lastIdx-1], m1 = macdLine[lastIdx], s0 = signalLine[lastIdx-1], s1 = signalLine[lastIdx];
+  if(m0==null || m1==null || s0==null || s1==null) return null;
+  const goldenCross = m0<=s0 && m1>s1;
+  const deadCross = m0>=s0 && m1<s1;
+
+  const last = candles[lastIdx];
+  let direction = null;
+  if(last.close > cloudTop && goldenCross) direction = 'long';
+  else if(last.close < cloudBottom && deadCross) direction = 'short';
+  if(!direction) return null;
+
+  const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
+  const tp = direction==='long' ? Math.max(...lookback.map(c=>c.high)) : Math.min(...lookback.map(c=>c.low));
+  const sl = direction==='long' ? Math.min(...lookback.map(c=>c.low)) : Math.max(...lookback.map(c=>c.high));
+  const signalId = String(last.time || lastIdx);
+  return { direction, tp, sl, signalId, patternKey:'J' };
+}
+
+function backtestPatternJ(candles){
+  const minLen = Math.max(ICHIMOKU_SENKOU_B+ICHIMOKU_DISPLACEMENT, MACD_SLOW+MACD_SIGNAL) + 5;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternJ(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'J', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
 async function placeOrder(direction, tp, sl){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
@@ -1375,6 +1488,10 @@ function patternDefs(){
       minLen: { higher: RSI_PERIOD+5, lower: RSI_PERIOD+5 },
       detect: (byTf)=>detectPatternI(byTf.higher, byTf.lower),
       backtest: (byTf)=>backtestPatternI(byTf.higher, byTf.lower) },
+    { key:'J', timeframes: { main: AT.TIMEFRAME_J || AT.TIMEFRAME },
+      minLen: { main: Math.max(ICHIMOKU_SENKOU_B+ICHIMOKU_DISPLACEMENT, MACD_SLOW+MACD_SIGNAL)+5 },
+      detect: (byTf)=>detectPatternJ(byTf.main),
+      backtest: (byTf)=>backtestPatternJ(byTf.main) },
   ];
 }
 

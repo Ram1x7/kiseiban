@@ -1246,49 +1246,61 @@ function updateAutotradeUI(){
   document.getElementById('atToggleState').textContent = atState.enabled ? 'ON' : 'OFF';
 }
 
-// Registry of every autotrade pattern. Each entry knows its own timeframe
-// (falling back to the shared AT.TIMEFRAME if no per-pattern override is
-// configured) and how to run both the live "is the latest candle
-// actionable right now" check and the "scan all history" backtest check.
+// Registry of every autotrade pattern. Each entry declares the timeframe(s)
+// it needs as a `timeframes` map from role name to timeframe string (single-
+// timeframe patterns just use one role, conventionally called "main"; multi-
+// timeframe patterns — e.g. a higher-timeframe direction filter plus a
+// lower-timeframe entry trigger — declare one role per timeframe they need,
+// such as {higher:'15m', lower:'1m'}). `minLen` mirrors that same shape:
+// the minimum candle count each role's detect() check needs, matching the
+// check inside that function. detect()/backtest() both receive a plain
+// object of {role: candles} rather than a flat candle array.
+//
 // autotradeTick() and runBacktest() both iterate this list instead of
 // hard-coding each pattern, so multiple patterns on different timeframes
-// can all be evaluated — and can all fire — in the same tick.
-// Each pattern's minLen is how many candles its detect() function needs at
-// minimum (matching the same check inside that function). Used to fetch
-// only as many candles as a timeframe's patterns actually require, rather
-// than a single blanket amount for every timeframe — fetching hundreds of
-// unneeded candles for fast timeframes made MetaApi noticeably slower to
-// respond and occasionally timed out (HTTP 504) once pattern F's 200-period
-// EMA pushed the shared limit up to 300 for every timeframe, including ones
-// that only ever needed ~20-30.
+// can all be evaluated — and can all fire — in the same tick. minLen is
+// used to fetch only as many candles as a timeframe's patterns actually
+// require, rather than a single blanket amount for every timeframe —
+// fetching hundreds of unneeded candles for fast timeframes made MetaApi
+// noticeably slower to respond and occasionally timed out (HTTP 504) once
+// pattern F's 200-period EMA pushed the shared limit up to 300 for every
+// timeframe, including ones that only ever needed ~20-30.
 const CANDLE_FETCH_MARGIN = 50; // safety buffer added on top of each pattern's minLen
 function patternDefs(){
   return [
-    { key:'A', timeframe: AT.TIMEFRAME_A || AT.TIMEFRAME, minLen: 10+5,
-      detect: (candles)=>detectSignal(candles, 10, 'A'),
-      backtest: (candles)=>backtestSignals(candles, 10, 'A') },
-    { key:'B', timeframe: AT.TIMEFRAME_B || AT.TIMEFRAME, minLen: 20+5,
-      detect: (candles)=>detectSignal(candles, 20, 'B'),
-      backtest: (candles)=>backtestSignals(candles, 20, 'B') },
-    { key:'C', timeframe: AT.TIMEFRAME_C || AT.TIMEFRAME, minLen: ICT_SWING_LOOKBACK+ICT_DISPLACEMENT_MAX_BARS+ICT_OB_LOOKBACK+3,
-      detect: (candles)=>detectICTSignal(candles, 'C'),
-      backtest: (candles)=>backtestICTSignals(candles, 'C') },
-    { key:'D', timeframe: AT.TIMEFRAME_D || '4h', minLen: PATTERN_D_EMA_PERIOD+TREND_SLOPE_LOOKBACK+PULLBACK_MIN_BARS+2,
-      detect: detectPatternD,
-      backtest: backtestPatternD },
-    { key:'F', timeframe: AT.TIMEFRAME_F || '4h', minLen: PATTERN_F_EMA_PERIOD+TREND_SLOPE_LOOKBACK+PULLBACK_MIN_BARS+2,
-      detect: detectPatternF,
-      backtest: backtestPatternF },
-    { key:'E', timeframe: AT.TIMEFRAME_E || AT.TIMEFRAME, minLen: DOW_PIVOT_WING*2+10,
-      detect: detectPatternE,
-      backtest: backtestPatternE },
-    { key:'G', timeframe: AT.TIMEFRAME_G || AT.TIMEFRAME, minLen: BB_PERIOD+2,
-      detect: detectPatternG,
-      backtest: backtestPatternG },
-    { key:'H', timeframe: AT.TIMEFRAME_H || AT.TIMEFRAME, minLen: DOW_PIVOT_WING*2+10,
-      detect: detectPatternH,
-      backtest: backtestPatternH },
+    { key:'A', timeframes: { main: AT.TIMEFRAME_A || AT.TIMEFRAME }, minLen: { main: 10+5 },
+      detect: (byTf)=>detectSignal(byTf.main, 10, 'A'),
+      backtest: (byTf)=>backtestSignals(byTf.main, 10, 'A') },
+    { key:'B', timeframes: { main: AT.TIMEFRAME_B || AT.TIMEFRAME }, minLen: { main: 20+5 },
+      detect: (byTf)=>detectSignal(byTf.main, 20, 'B'),
+      backtest: (byTf)=>backtestSignals(byTf.main, 20, 'B') },
+    { key:'C', timeframes: { main: AT.TIMEFRAME_C || AT.TIMEFRAME }, minLen: { main: ICT_SWING_LOOKBACK+ICT_DISPLACEMENT_MAX_BARS+ICT_OB_LOOKBACK+3 },
+      detect: (byTf)=>detectICTSignal(byTf.main, 'C'),
+      backtest: (byTf)=>backtestICTSignals(byTf.main, 'C') },
+    { key:'D', timeframes: { main: AT.TIMEFRAME_D || '4h' }, minLen: { main: PATTERN_D_EMA_PERIOD+TREND_SLOPE_LOOKBACK+PULLBACK_MIN_BARS+2 },
+      detect: (byTf)=>detectPatternD(byTf.main),
+      backtest: (byTf)=>backtestPatternD(byTf.main) },
+    { key:'F', timeframes: { main: AT.TIMEFRAME_F || '4h' }, minLen: { main: PATTERN_F_EMA_PERIOD+TREND_SLOPE_LOOKBACK+PULLBACK_MIN_BARS+2 },
+      detect: (byTf)=>detectPatternF(byTf.main),
+      backtest: (byTf)=>backtestPatternF(byTf.main) },
+    { key:'E', timeframes: { main: AT.TIMEFRAME_E || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*2+10 },
+      detect: (byTf)=>detectPatternE(byTf.main),
+      backtest: (byTf)=>backtestPatternE(byTf.main) },
+    { key:'G', timeframes: { main: AT.TIMEFRAME_G || AT.TIMEFRAME }, minLen: { main: BB_PERIOD+2 },
+      detect: (byTf)=>detectPatternG(byTf.main),
+      backtest: (byTf)=>backtestPatternG(byTf.main) },
+    { key:'H', timeframes: { main: AT.TIMEFRAME_H || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*2+10 },
+      detect: (byTf)=>detectPatternH(byTf.main),
+      backtest: (byTf)=>backtestPatternH(byTf.main) },
   ];
+}
+
+// Human-readable "key(tf)" or "key(role:tf/role:tf)" summary used in the
+// autotrade note and backtest result text.
+function formatPatternTimeframes(def){
+  const roles = Object.keys(def.timeframes);
+  if(roles.length === 1 && roles[0] === 'main') return def.timeframes.main;
+  return roles.map(r=>`${r}:${def.timeframes[r]}`).join('/');
 }
 
 // Fetches one candle batch per distinct timeframe (so patterns sharing a
@@ -1327,17 +1339,26 @@ async function autotradeTick(){
     const defs = patternDefs();
     const limitByTf = {};
     for(const d of defs){
-      const needed = Math.min(d.minLen + CANDLE_FETCH_MARGIN, 500);
-      if(!limitByTf[d.timeframe] || limitByTf[d.timeframe] < needed) limitByTf[d.timeframe] = needed;
+      for(const role of Object.keys(d.timeframes)){
+        const tf = d.timeframes[role];
+        const needed = Math.min(d.minLen[role] + CANDLE_FETCH_MARGIN, 500);
+        if(!limitByTf[tf] || limitByTf[tf] < needed) limitByTf[tf] = needed;
+      }
     }
     const timeframeLimits = Object.entries(limitByTf).map(([timeframe, limit]) => ({ timeframe, limit }));
     const candlesByTf = await fetchCandlesByTimeframe(timeframeLimits);
 
     const signals = [];
     for(const def of defs){
-      const candles = candlesByTf[def.timeframe];
-      if(!candles || candles.length < 30) continue;
-      const sig = def.detect(candles);
+      const byTf = {};
+      let sufficient = true;
+      for(const role of Object.keys(def.timeframes)){
+        const candles = candlesByTf[def.timeframes[role]];
+        if(!candles || candles.length < 30){ sufficient = false; break; }
+        byTf[role] = candles;
+      }
+      if(!sufficient) continue;
+      const sig = def.detect(byTf);
       if(sig) signals.push(sig);
     }
 
@@ -1459,7 +1480,7 @@ function renderAutotradeNote(){
   if(canArm){
     badge.textContent = '接続中';
     badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)'; badge.style.borderColor = 'var(--green)';
-    const tfSummary = patternDefs().map(p=>`${p.key}:${p.timeframe}`).join(' ');
+    const tfSummary = patternDefs().map(p=>`${p.key}:${formatPatternTimeframes(p)}`).join(' ');
     note.textContent = `対象: ${AT.SYMBOL} / 各パターンの時間足(${tfSummary}) / ロット${AT.LOT_SIZE} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
   } else if(!LIVE_MODE){
     note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。自動売買はLIVE接続時のみ有効です。';
@@ -1495,13 +1516,23 @@ async function runBacktest(){
   resultEl.textContent = '集計中…';
   try{
     const defs = patternDefs();
-    const timeframes = [...new Set(defs.map(d=>d.timeframe))];
-    const candlesByTf = await fetchCandlesByTimeframe(timeframes.map(timeframe => ({ timeframe, limit: 1000 })));
+    const allTimeframes = [...new Set(defs.flatMap(d=>Object.values(d.timeframes)))];
+    const candlesByTf = await fetchCandlesByTimeframe(allTimeframes.map(timeframe => ({ timeframe, limit: 1000 })));
 
     const perPattern = defs.map(def=>{
-      const candles = candlesByTf[def.timeframe] || [];
-      const results = candles.length >= 30 ? def.backtest(candles) : [];
-      return { def, candles, results };
+      const byTf = {};
+      let sufficient = true;
+      for(const role of Object.keys(def.timeframes)){
+        const candles = candlesByTf[def.timeframes[role]] || [];
+        if(candles.length < 30) sufficient = false;
+        byTf[role] = candles;
+      }
+      const results = sufficient ? def.backtest(byTf) : [];
+      // Only used for the overall date-range display below — the first
+      // declared role's candles stand in for the pattern's span even when
+      // it uses more than one timeframe.
+      const displayCandles = byTf[Object.keys(def.timeframes)[0]] || [];
+      return { def, candles: displayCandles, results };
     });
 
     const withData = perPattern.filter(p=>p.candles.length > 0);
@@ -1518,7 +1549,7 @@ async function runBacktest(){
     const to = new Date(Math.max(...withData.map(p=>new Date(p.candles[p.candles.length-1].time).getTime())));
     const days = Math.max((to-from)/86400000, 1/24);
     const perDay = all.length / days;
-    const perPatternText = perPattern.map(p=>`パターン${p.def.key}(${p.def.timeframe}): ${p.results.length}`).join(' / ');
+    const perPatternText = perPattern.map(p=>`パターン${p.def.key}(${formatPatternTimeframes(p.def)}): ${p.results.length}`).join(' / ');
 
     resultEl.textContent =
       `対象: ${AT.SYMBOL}\n` +

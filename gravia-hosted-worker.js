@@ -161,8 +161,12 @@ async function handleDashboard(reqUrl, env) {
   const configScript = `<script>window.CONFIG = ${JSON.stringify(config)};</script>`;
   const injected = html.replace('<script src="config.js"></script>', configScript);
 
+  // Every response here has a freshly injected CONFIG (including secrets
+  // and any newly-changed settings/features), so the browser must never
+  // reuse a cached copy — without this, iOS Safari in particular can keep
+  // serving a stale page for a long time after a Worker/index.html update.
   return new Response(injected, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
   });
 }
 

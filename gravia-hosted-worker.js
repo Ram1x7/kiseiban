@@ -126,6 +126,10 @@ async function handleDashboard(reqUrl, env) {
     METAAPI_ACCOUNT_ID: env.METAAPI_ACCOUNT_ID,
     METAAPI_REGION: env.METAAPI_REGION || 'new-york',
     SYMBOL: env.SYMBOL || 'BTCUSD',
+    // Optional comma-separated list of symbols the on-screen switcher lets
+    // the user flip between (e.g. "USDJPY,BTCUSD"). Leaving this unset
+    // keeps the switcher hidden and SYMBOL above as the only symbol used.
+    SYMBOL_CHOICES: env.SYMBOL_CHOICES || undefined,
     POLL_MS: numOr(env.POLL_MS, 5000),
     WORKER_PROXY_URL: reqUrl.origin,
     AUTOTRADE: {

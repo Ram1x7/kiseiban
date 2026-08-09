@@ -176,6 +176,11 @@
   }
   .at-btn:disabled{ opacity:0.4; cursor:not-allowed; }
   .at-btn:hover:not(:disabled){ border-color:var(--pink); }
+  .at-pnl-reset-btn{
+    background:none; border:none; color:var(--txt-dim); font-size:9px; padding:0;
+    margin-top:2px; cursor:pointer; text-decoration:underline; letter-spacing:0.5px; text-align:left;
+  }
+  .at-pnl-reset-btn:hover{ color:var(--pink); }
   .at-backtest-result{ margin-top:8px; color:var(--txt); font-size:11px; line-height:1.7; white-space:pre-wrap; }
   .symbol-row{ display:none; align-items:center; gap:8px; margin-bottom:8px; }
   .symbol-row .k{ color:var(--txt-dim); font-size:9px; letter-spacing:1px; }
@@ -220,7 +225,7 @@
       <input type="checkbox" id="atEnableToggle" disabled>
       <span>自動売買 <b id="atToggleState">OFF</b></span>
     </label>
-    <div class="at-stat"><span class="k">本日の損益</span><span class="v" id="atDailyPnl">$0.00</span></div>
+    <div class="at-stat"><span class="k">本日の損益</span><span class="v" id="atDailyPnl">$0.00</span><button type="button" class="at-pnl-reset-btn" id="atPnlResetBtn" title="画面上の表示だけを0にリセットします。実際の口座履歴・日次損失上限の判定には影響しません">表示リセット</button></div>
     <div class="at-stat"><span class="k">保有ポジション</span><span class="v" id="atOpenPositions">0 / 1</span></div>
     <div class="at-stat"><span class="k">直近判定</span><span class="v" id="atLastSignal">—</span></div>
     <button class="at-btn" id="atBacktestBtn" disabled>過去のシグナル頻度を確認</button>
@@ -648,7 +653,31 @@ const atState = {
   lastProcessed: {},
   polling: false,
   lastStatusLogAt: 0,
+  // Display-only offset for the on-screen PnL figures (see displayPnl()
+  // below). Purely cosmetic — subtracted only when rendering, never from
+  // state.pnl itself, so the MAX_DAILY_LOSS circuit breaker in
+  // autotradeTick() keeps checking the real, unadjusted realized PnL.
+  pnlDisplayBaseline: 0,
 };
+try{
+  const savedBaseline = Number(localStorage.getItem('gravia_pnl_display_baseline'));
+  if(Number.isFinite(savedBaseline)) atState.pnlDisplayBaseline = savedBaseline;
+}catch(e){ /* localStorage unavailable — ignore */ }
+
+// The on-screen PnL figures show this instead of the raw state.pnl, so a
+// "reset display" click can zero out what the user sees without touching
+// the real account history state.pnl is computed from (mapLiveDataToState())
+// or the safety-critical MAX_DAILY_LOSS check in autotradeTick(), which both
+// keep using state.pnl directly.
+function displayPnl(){
+  return state.pnl - atState.pnlDisplayBaseline;
+}
+function resetPnlDisplay(){
+  atState.pnlDisplayBaseline = state.pnl;
+  try{ localStorage.setItem('gravia_pnl_display_baseline', String(atState.pnlDisplayBaseline)); }catch(e){ /* ignore */ }
+  renderAll();
+  updateAutotradeUI();
+}
 // シグナル未検出でも「動いていることが分かる」よう、この間隔で現在値と
 // EMAの位置関係を実行ログへ一言出す(スパム防止のため間引く)。
 const STATUS_LOG_INTERVAL_MS = 5*60*1000;
@@ -1620,8 +1649,8 @@ function atLog(tag, msg){
 
 function updateAutotradeUI(){
   const pnlEl = document.getElementById('atDailyPnl');
-  pnlEl.textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
-  pnlEl.style.color = state.pnl>=0 ? 'var(--green)' : 'var(--pink)';
+  pnlEl.textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
+  pnlEl.style.color = displayPnl()>=0 ? 'var(--green)' : 'var(--pink)';
   document.getElementById('atOpenPositions').textContent = `${atState.openPositions} / ${AT.MAX_OPEN_POSITIONS}`;
   document.getElementById('atLastSignal').textContent = atState.lastSignalText;
   document.getElementById('atToggleState').textContent = atState.enabled ? 'ON' : 'OFF';
@@ -1903,6 +1932,11 @@ function initAutotradeUI(){
   backtestBtn.disabled = !LIVE_MODE;
   backtestBtn.addEventListener('click', runBacktest);
 
+  document.getElementById('atPnlResetBtn').addEventListener('click', ()=>{
+    resetPnlDisplay();
+    atLog('SIG', '本日の損益表示をリセットしました(実際の口座履歴・日次損失上限の判定には影響しません)。');
+  });
+
   updateAutotradeUI();
 }
 
@@ -2170,7 +2204,7 @@ function renderTrades(){
 
 function renderHeaderAndCards(){
   document.getElementById('hPrice').textContent = '$'+fmt(state.price,2);
-  document.getElementById('hPnl').textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+  document.getElementById('hPnl').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
   document.getElementById('hTrades').textContent = state.trades+'/'+state.totalTrades;
   const winPct = state.trades? (state.wins/state.trades*100):100;
   document.getElementById('hWin').textContent = fmt(winPct,1)+'%';
@@ -2193,9 +2227,9 @@ function renderHeaderAndCards(){
   document.getElementById('streakGain').textContent = '+'+fmt(growth,0)+'%';
   document.getElementById('streakDur').textContent = new Date().toTimeString().slice(0,5);
 
-  document.getElementById('mfPnl').textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+  document.getElementById('mfPnl').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
 
-  document.getElementById('curveVal').textContent = (state.pnl>=0?'+':'')+fmtMoney(state.pnl);
+  document.getElementById('curveVal').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
   document.getElementById('curveT').textContent = state.trades;
   document.getElementById('curveW').textContent = fmt(winPct,1)+'%';
 

@@ -159,6 +159,7 @@ async function handleDashboard(reqUrl, env) {
       // independent timeframe overrides instead of one.
       TIMEFRAME_I_HIGH: env.AUTOTRADE_TIMEFRAME_I_HIGH || undefined,
       TIMEFRAME_I_LOW: env.AUTOTRADE_TIMEFRAME_I_LOW || undefined,
+      TIMEFRAME_J: env.AUTOTRADE_TIMEFRAME_J || undefined,
     },
   };
 

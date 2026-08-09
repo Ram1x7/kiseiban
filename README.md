@@ -64,7 +64,7 @@
    | `AUTOTRADE_PINBAR_WICK_MULT` | `1.5` | ピンバー判定の閾値 |
    | `AUTOTRADE_PINBAR_WICK_RATIO` | `0.5` | ピンバー判定の閾値 |
    | `AUTOTRADE_POLL_MS` | `30000` | 戦略判定の間隔 |
-   | `AUTOTRADE_TIMEFRAME_A`〜`_H` | (未設定) | パターンごとに時間足を個別指定したい場合のみ設定(A/B/C/G/Hは未設定なら`AUTOTRADE_TIMEFRAME`、D/Fは未設定なら`4h`)。パターンの詳細は下記「3.」参照 |
+   | `AUTOTRADE_TIMEFRAME_A`〜`_J`(Iのみ`_I_HIGH`/`_I_LOW`) | (未設定) | パターンごとに時間足を個別指定したい場合のみ設定(A/B/C/E/G/H/Jは未設定なら`AUTOTRADE_TIMEFRAME`、D/Fは未設定なら`4h`)。パターンの詳細は下記「3.」参照 |
 
 4. 保存後、`https://xxxx.workers.dev/?key=<ACCESS_KEYに設定した値>` をSafariで開きます。これがあなたの本番ダッシュボードURLです。**このURL(鍵付き)をSafariのブックマーク/ホーム画面に追加**しておくと便利です
 5. `key`が一致しない、または`ACCESS_KEY`/`METAAPI_TOKEN`/`METAAPI_ACCOUNT_ID`のいずれかが未設定の場合は、安全のためすべてのリクエストが拒否されます(エラーメッセージに何が未設定かが表示されます)
@@ -117,10 +117,11 @@ MetaApiの取引用REST APIはブラウザからの直接アクセス(CORS)に�
 - **パターンG(ボリンジャーバンド±2σ逆張り)**: 20期間の移動平均±標準偏差2倍を上下バンドとし、ローソク足のヒゲがバンドを一瞬突き抜けたあと、同じ足の終値がバンド内に戻り、かつ反発方向の陽線/陰線で確定したら成立(LONG/SHORT両方向)。利確目標はバンド中央(移動平均)への回帰
 - **パターンH(N波動×フィボナッチ)**: パターンEと同じスイング高値/安値の検出を使い、直近の「安値→高値」(LONG)または「高値→安値」(SHORT)の1波動を推進波とみなす → その波動の50%〜61.8%押し(ゴールデンゾーン)まで価格が戻り、波動方向に沿った陽線/陰線で確定したら成立。利確目標は波動の127.2%フィボナッチ拡張、損切りは波動の起点
 - **パターンI(RSIスキャルピング)**: 上位足(既定15分足)と下位足(既定1分足)それぞれのRSI(14)が50を基準に同じ側(共に50超/共に50未満)にあれば成立(LONG/SHORT両方向)。他パターンより判定がシンプルな分、根拠は薄めでシグナル頻度も高くなります(参考実装元でも「シンプルさ重視」と明記されています)
+- **パターンJ(一目均衡表×MACD)**: 一目均衡表(9,26,52,26)の雲より終値が上にあり、かつMACD(12,26,9)がゴールデンクロスした瞬間に成立(LONG)。雲より下でデッドクロスした瞬間ならSHORT。参考にした手法説明では決済を「MACDの反対クロスで手仕舞い」としていますが、このツールは他パターンと同様に発注時固定のTP/SLのみに対応しているため(ポジションを後から監視して閉じる仕組みは無いため)、決済は他パターンと同じ直近高安値ベースのTP/SLに簡略化しています
 
-⚠️ **パターンGは逆張り(トレンドに逆らう)、それ以外(A/B/D/E/F/H/I)はすべて順張り(トレンドに沿う)です。** 両方を同時に有効にすると、同じ時期に正反対の方向へシグナルが出ることがあります。
+⚠️ **パターンGは逆張り(トレンドに逆らう)、それ以外(A/B/D/E/F/H/I/J)はすべて順張り(トレンドに沿う)です。** 両方を同時に有効にすると、同じ時期に正反対の方向へシグナルが出ることがあります。
 
-⚠️ **パターンIはA〜Hと違い、上位足・下位足の2つの時間足を同時に使います。** パターンごとに時間足を個別に設定できる点は同じですが、Iは`TIMEFRAME_I_HIGH`(既定`15m`)・`TIMEFRAME_I_LOW`(既定`1m`)の2つの変数で個別に設定します。他のパターン(A/B/C/E/G/H)は未設定なら共通の`TIMEFRAME`、D/Fは`4h`が既定値になります。方法A(Worker)なら`AUTOTRADE_TIMEFRAME_A`〜`AUTOTRADE_TIMEFRAME_H`・`AUTOTRADE_TIMEFRAME_I_HIGH`・`AUTOTRADE_TIMEFRAME_I_LOW`、方法B(config.js)なら`AUTOTRADE.TIMEFRAME_A`〜`TIMEFRAME_H`・`TIMEFRAME_I_HIGH`・`TIMEFRAME_I_LOW`で上書きしてください(`config.example.js`にコメントアウトで記載)。
+⚠️ **パターンIはA〜Hと違い、上位足・下位足の2つの時間足を同時に使います。** パターンごとに時間足を個別に設定できる点は同じですが、Iは`TIMEFRAME_I_HIGH`(既定`15m`)・`TIMEFRAME_I_LOW`(既定`1m`)の2つの変数で個別に設定します。他のパターン(A/B/C/E/G/H)は未設定なら共通の`TIMEFRAME`、D/Fは`4h`が既定値になります。方法A(Worker)なら`AUTOTRADE_TIMEFRAME_A`〜`AUTOTRADE_TIMEFRAME_J`・`AUTOTRADE_TIMEFRAME_I_HIGH`・`AUTOTRADE_TIMEFRAME_I_LOW`、方法B(config.js)なら`AUTOTRADE.TIMEFRAME_A`〜`TIMEFRAME_J`・`TIMEFRAME_I_HIGH`・`TIMEFRAME_I_LOW`で上書きしてください(`config.example.js`にコメントアウトで記載)。
 
 - **必ずデモ口座で動作確認してから使ってください。** 本番口座でいきなり有効化することはおすすめしません
 - 発注には2つの独立したスイッチが両方ONである必要があります: (1) マスタースイッチ(方法A: Workerの`AUTOTRADE_ENABLED`変数 / 方法B: `config.js`の`AUTOTRADE.ENABLED`)、(2) 画面上の「自動売買」トグル。**トグルは安全のため、ページを開き直すたびに毎回OFFにリセットされます**

@@ -275,7 +275,7 @@
     </div>
     <canvas id="streakbar"></canvas>
     <div class="streak-foot">
-      <div><b id="streakBest">$0</b>BEST</div>
+      <div><b id="streakBest">0</b>BEST</div>
       <div><b id="streakGain">+0%</b>GAIN</div>
       <div><b id="streakDur">00:00</b>DUR</div>
     </div>
@@ -352,6 +352,7 @@ if(typeof CONFIG === 'undefined'){
   window.CONFIG = { METAAPI_TOKEN:'', METAAPI_ACCOUNT_ID:'', METAAPI_REGION:'new-york', SYMBOL:'BTCUSD', POLL_MS:5000, WORKER_PROXY_URL:'' };
 }
 if(CONFIG.WORKER_PROXY_URL === undefined) CONFIG.WORKER_PROXY_URL = '';
+if(!CONFIG.CURRENCY_SYMBOL) CONFIG.CURRENCY_SYMBOL = '$';
 if(!CONFIG.AUTOTRADE){
   // 古いconfig.js(自動売買追加前)を使っている場合の安全なフォールバック。
   // ENABLEDがfalseなので、これだけでは絶対に発注されない。
@@ -416,8 +417,8 @@ function rnd(min, max){ return Math.random()*(max-min)+min; }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function fmt(n, d=2){ return n.toLocaleString('en-US',{minimumFractionDigits:d, maximumFractionDigits:d}); }
 function fmtMoney(n){
-  if(Math.abs(n) >= 1000) return '$'+fmt(n,0);
-  return '$'+fmt(n,2);
+  if(Math.abs(n) >= 1000) return CONFIG.CURRENCY_SYMBOL+fmt(n,0);
+  return CONFIG.CURRENCY_SYMBOL+fmt(n,2);
 }
 
 // ---------- Simulated data source (swap point) ----------
@@ -2311,7 +2312,7 @@ function drawVolBars(id, data, color){
 function renderLogs(){
   const el = document.getElementById('logBody');
   el.innerHTML = state.logs.slice(-40).map(l=>{
-    const priceHtml = l.price!=null ? ` <span class="px">$${fmt(l.price,2)}</span>` : '';
+    const priceHtml = l.price!=null ? ` <span class="px">${CONFIG.CURRENCY_SYMBOL}${fmt(l.price,2)}</span>` : '';
     const pnlHtml = l.pnl!=null ? ` <span style="color:${l.pnl>=0?'#28ffb0':'#ff2e88'}">${l.pnl>=0?'+':''}${fmt(l.pnl,2)}</span>` : '';
     return `<div class="logline"><span class="t">${l.t}</span><span class="tag ${l.tag}">${l.tag}</span><span class="msg">${l.msg}</span>${priceHtml}${pnlHtml}</div>`;
   }).join('');
@@ -2322,7 +2323,7 @@ function renderTrades(){
   const body = document.getElementById('tradesBody');
   body.innerHTML = tradesTableRows.map(t=>{
     return `<tr>
-      <td>$${fmt(t.price,2)}</td>
+      <td>${CONFIG.CURRENCY_SYMBOL}${fmt(t.price,2)}</td>
       <td class="${t.winPct>=50?'up':'dn'}">${fmt(t.winPct,1)}%</td>
       <td class="${t.pnl>=0?'up':'dn'}">${t.pnl>=0?'+':''}${fmt(t.pnl,2)}</td>
     </tr>`;
@@ -2330,7 +2331,7 @@ function renderTrades(){
 }
 
 function renderHeaderAndCards(){
-  document.getElementById('hPrice').textContent = '$'+fmt(state.price,2);
+  document.getElementById('hPrice').textContent = CONFIG.CURRENCY_SYMBOL+fmt(state.price,2);
   document.getElementById('hPnl').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
   document.getElementById('hTrades').textContent = state.trades+'/'+state.totalTrades;
   const winPct = state.trades? (state.wins/state.trades*100):100;
@@ -2351,7 +2352,7 @@ function renderHeaderAndCards(){
   document.getElementById('eqWin').textContent = fmt(winPct,1)+'%';
   document.getElementById('eqAvg').textContent = fmtMoney(state.trades? state.pnl/state.trades : 0);
 
-  document.getElementById('cPrice').textContent = '$'+fmt(state.price,2);
+  document.getElementById('cPrice').textContent = CONFIG.CURRENCY_SYMBOL+fmt(state.price,2);
   document.getElementById('book').innerHTML = state.candles.slice(-4).reverse().map(c=>{
     return `${fmt(c.close,2)} <b>${(c.close-c.open>=0?'▲':'▼')}</b>`;
   }).join('<br>');

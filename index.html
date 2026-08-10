@@ -1509,6 +1509,92 @@ function backtestPatternN(candles){
 }
 
 // =========================================================
+// PATTERN O — Head & Shoulders / Inverse Head & Shoulders, reusing the
+// same confirmed-swing-pivot detection as patterns E/H/M/N.
+//   Head & Shoulders (SHORT): three consecutive confirmed swing highs —
+//     left shoulder, head (the highest of the three), right shoulder
+//     (within HEAD_SHOULDER_TOLERANCE_PCT of the left shoulder's height).
+//     The neckline is a trendline through the two confirmed swing lows
+//     between shoulder-head and head-shoulder -> entry on the first candle
+//     that closes below the (possibly sloped) neckline, confirmed bearish.
+//   Inverse Head & Shoulders (LONG): the mirror image, built from swing
+//     lows instead of highs.
+//   TP: measured move — the head's height above/below the neckline (at the
+//     head's own index, since the neckline can slope), projected the same
+//     distance beyond the neckline break. SL: beyond the head itself (the
+//     pattern's own worst-case invalidation point).
+// =========================================================
+const HEAD_SHOULDER_TOLERANCE_PCT = 0.015; // how close the two shoulders must be (as a fraction of price) to count as symmetric
+
+function detectPatternO(candles){
+  const lastIdx = candles.length-1;
+  const minLen = DOW_PIVOT_WING*6 + 10;
+  if(candles.length < minLen) return null;
+
+  const { highs, lows } = findSwingPivots(candles, lastIdx-1, DOW_PIVOT_WING);
+  const last = candles[lastIdx];
+  const prev = candles[lastIdx-1];
+
+  // Head & Shoulders -> SHORT.
+  if(highs.length >= 3){
+    const leftShoulder = highs[highs.length-3], head = highs[highs.length-2], rightShoulder = highs[highs.length-1];
+    const isHead = head.price > leftShoulder.price && head.price > rightShoulder.price;
+    const shouldersMatch = Math.abs(rightShoulder.price-leftShoulder.price)/leftShoulder.price <= HEAD_SHOULDER_TOLERANCE_PCT;
+    if(isHead && shouldersMatch){
+      const leftTrough = lows.filter(l => l.idx > leftShoulder.idx && l.idx < head.idx).sort((a,b)=>a.price-b.price)[0];
+      const rightTrough = lows.filter(l => l.idx > head.idx && l.idx < rightShoulder.idx).sort((a,b)=>a.price-b.price)[0];
+      if(leftTrough && rightTrough && leftTrough.idx !== rightTrough.idx){
+        const neckline = fitTrendline(leftTrough.idx, leftTrough.price, rightTrough.idx, rightTrough.price);
+        const necklineAtLast = trendlineValueAt(neckline, lastIdx);
+        const necklineAtPrev = trendlineValueAt(neckline, lastIdx-1);
+        const freshBreak = last.close < necklineAtLast && prev.close >= necklineAtPrev && last.close < last.open;
+        if(freshBreak){
+          const height = head.price - trendlineValueAt(neckline, head.idx);
+          if(height > 0){
+            return { direction:'short', tp: necklineAtLast-height, sl: head.price, signalId: String(last.time||lastIdx), patternKey:'O' };
+          }
+        }
+      }
+    }
+  }
+
+  // Inverse Head & Shoulders -> LONG (mirror).
+  if(lows.length >= 3){
+    const leftShoulder = lows[lows.length-3], head = lows[lows.length-2], rightShoulder = lows[lows.length-1];
+    const isHead = head.price < leftShoulder.price && head.price < rightShoulder.price;
+    const shouldersMatch = Math.abs(rightShoulder.price-leftShoulder.price)/leftShoulder.price <= HEAD_SHOULDER_TOLERANCE_PCT;
+    if(isHead && shouldersMatch){
+      const leftPeak = highs.filter(h => h.idx > leftShoulder.idx && h.idx < head.idx).sort((a,b)=>b.price-a.price)[0];
+      const rightPeak = highs.filter(h => h.idx > head.idx && h.idx < rightShoulder.idx).sort((a,b)=>b.price-a.price)[0];
+      if(leftPeak && rightPeak && leftPeak.idx !== rightPeak.idx){
+        const neckline = fitTrendline(leftPeak.idx, leftPeak.price, rightPeak.idx, rightPeak.price);
+        const necklineAtLast = trendlineValueAt(neckline, lastIdx);
+        const necklineAtPrev = trendlineValueAt(neckline, lastIdx-1);
+        const freshBreak = last.close > necklineAtLast && prev.close <= necklineAtPrev && last.close > last.open;
+        if(freshBreak){
+          const height = trendlineValueAt(neckline, head.idx) - head.price;
+          if(height > 0){
+            return { direction:'long', tp: necklineAtLast+height, sl: head.price, signalId: String(last.time||lastIdx), patternKey:'O' };
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function backtestPatternO(candles){
+  const minLen = DOW_PIVOT_WING*6 + 10;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternO(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'O', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
+// =========================================================
 // PATTERN I — RSI scalping across a higher/lower timeframe pair.
 //   1) RSI(14) on the higher timeframe is above 50 (bullish) or below 50
 //      (bearish)
@@ -2078,6 +2164,9 @@ function patternDefs(){
     { key:'N', timeframes: { main: AT.TIMEFRAME_N || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*4+10 },
       detect: (byTf)=>detectPatternN(byTf.main),
       backtest: (byTf)=>backtestPatternN(byTf.main) },
+    { key:'O', timeframes: { main: AT.TIMEFRAME_O || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*6+10 },
+      detect: (byTf)=>detectPatternO(byTf.main),
+      backtest: (byTf)=>backtestPatternO(byTf.main) },
   ];
   return disabled.size === 0 ? all : all.filter(d=>!disabled.has(d.key));
 }

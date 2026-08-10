@@ -1266,6 +1266,82 @@ function backtestPatternH(candles){
 }
 
 // =========================================================
+// PATTERN M — Double Top / Double Bottom reversal, reusing the same
+// confirmed-swing-pivot detection as patterns E/H.
+//   Double Top (SHORT): two confirmed swing highs within
+//     DOUBLE_TOP_TOLERANCE_PCT of each other ("twin peaks"), with a
+//     confirmed swing low between them (the "neckline") -> entry on the
+//     first candle that closes below the neckline, confirmed bearish
+//   Double Bottom (LONG): the mirror image
+//   TP: the classic "measured move" — the peak-to-neckline (or
+//     neckline-to-trough) height, projected the same distance beyond the
+//     neckline break. SL: beyond the second peak/trough (the pattern's
+//     own invalidation point).
+// =========================================================
+const DOUBLE_TOP_TOLERANCE_PCT = 0.003; // how close the two peaks/troughs must be (as a fraction of price) to count as a "double"
+
+function detectPatternM(candles){
+  const lastIdx = candles.length-1;
+  const minLen = DOW_PIVOT_WING*4 + 10;
+  if(candles.length < minLen) return null;
+
+  const { highs, lows } = findSwingPivots(candles, lastIdx-1, DOW_PIVOT_WING);
+  const last = candles[lastIdx];
+  const prev = candles[lastIdx-1];
+
+  // Double Top -> SHORT.
+  if(highs.length >= 2){
+    const topB = highs[highs.length-1], topA = highs[highs.length-2];
+    if(Math.abs(topB.price-topA.price)/topA.price <= DOUBLE_TOP_TOLERANCE_PCT){
+      const between = lows.filter(l => l.idx > topA.idx && l.idx < topB.idx);
+      const neckline = between.sort((a,b)=>a.price-b.price)[0]; // lowest confirmed low between the two peaks
+      if(neckline){
+        // Edge-triggered: only the FIRST candle to close below the
+        // neckline counts, not every subsequent candle that stays below
+        // it — same reasoning as patternE/H/C's fresh-event requirement.
+        const freshBreak = last.close < neckline.price && prev.close >= neckline.price && last.close < last.open;
+        if(freshBreak){
+          const height = ((topA.price+topB.price)/2) - neckline.price;
+          if(height > 0){
+            return { direction:'short', tp: neckline.price-height, sl: Math.max(topA.price,topB.price), signalId: String(last.time||lastIdx), patternKey:'M' };
+          }
+        }
+      }
+    }
+  }
+
+  // Double Bottom -> LONG (mirror).
+  if(lows.length >= 2){
+    const botB = lows[lows.length-1], botA = lows[lows.length-2];
+    if(Math.abs(botB.price-botA.price)/botA.price <= DOUBLE_TOP_TOLERANCE_PCT){
+      const between = highs.filter(h => h.idx > botA.idx && h.idx < botB.idx);
+      const neckline = between.sort((a,b)=>b.price-a.price)[0]; // highest confirmed high between the two troughs
+      if(neckline){
+        const freshBreak = last.close > neckline.price && prev.close <= neckline.price && last.close > last.open;
+        if(freshBreak){
+          const height = neckline.price - ((botA.price+botB.price)/2);
+          if(height > 0){
+            return { direction:'long', tp: neckline.price+height, sl: Math.min(botA.price,botB.price), signalId: String(last.time||lastIdx), patternKey:'M' };
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function backtestPatternM(candles){
+  const minLen = DOW_PIVOT_WING*4 + 10;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternM(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'M', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
+// =========================================================
 // PATTERN I — RSI scalping across a higher/lower timeframe pair.
 //   1) RSI(14) on the higher timeframe is above 50 (bullish) or below 50
 //      (bearish)
@@ -1829,6 +1905,9 @@ function patternDefs(){
       minLen: { higher: MACD_SLOW+MACD_SIGNAL+5, lower: Math.max(PATTERN_L_EMA_SLOW, BB_PERIOD)+5 },
       detect: (byTf)=>detectPatternL(byTf.higher, byTf.lower),
       backtest: (byTf)=>backtestPatternL(byTf.higher, byTf.lower) },
+    { key:'M', timeframes: { main: AT.TIMEFRAME_M || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*4+10 },
+      detect: (byTf)=>detectPatternM(byTf.main),
+      backtest: (byTf)=>backtestPatternM(byTf.main) },
   ];
   return disabled.size === 0 ? all : all.filter(d=>!disabled.has(d.key));
 }

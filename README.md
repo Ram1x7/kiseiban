@@ -54,6 +54,7 @@
    | `SYMBOL` | `BTCUSD` | ローソク足に表示する銘柄 |
    | `SYMBOL_CHOICES` | (未設定) | 画面上に銘柄切り替えボタンを表示したい場合のみ、カンマ区切りで設定(例: `USDJPY,BTCUSD`)。ボタンを押すと`SYMBOL`・`AUTOTRADE_SYMBOL`の両方がその場で切り替わり、次回開いた時も記憶されます。未設定、または1つしか無い場合はボタンは表示されません |
    | `POLL_MS` | `5000` | 何msごとにMT5へ問い合わせるか |
+   | `CURRENCY_SYMBOL` | `$` | 画面上の金額(資産・損益・日次損失上限など)の先頭に付ける通貨記号。表示だけの設定で換算は行わない(例: `¥`) |
    | `AUTOTRADE_ENABLED` | `false` | `true`にすると自動売買のマスタースイッチがONになる(下記「3.」参照) |
    | `AUTOTRADE_SYMBOL` | `USDJPY` | 自動売買の対象銘柄 |
    | `AUTOTRADE_TIMEFRAME` | `4h` | 自動売買の判定時間足 |

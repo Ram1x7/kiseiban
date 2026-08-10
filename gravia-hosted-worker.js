@@ -130,6 +130,12 @@ async function handleDashboard(reqUrl, env) {
     // the user flip between (e.g. "USDJPY,BTCUSD"). Leaving this unset
     // keeps the switcher hidden and SYMBOL above as the only symbol used.
     SYMBOL_CHOICES: env.SYMBOL_CHOICES || undefined,
+    // Purely cosmetic: the character shown before every money amount on
+    // the dashboard (equity, PnL, daily loss limit, price tags). Doesn't
+    // convert or affect any actual number — just changes which symbol is
+    // printed in front of it. Useful e.g. for a JPY-denominated account
+    // where "$" is misleading.
+    CURRENCY_SYMBOL: env.CURRENCY_SYMBOL || '$',
     POLL_MS: numOr(env.POLL_MS, 5000),
     WORKER_PROXY_URL: reqUrl.origin,
     AUTOTRADE: {

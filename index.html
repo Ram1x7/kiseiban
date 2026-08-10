@@ -1864,6 +1864,28 @@ async function autotradeTick(){
         continue;
       }
 
+      // signal.tp/signal.sl were computed from a closed candle, which can
+      // already be stale by the time we actually submit the order —
+      // especially right after a sharp reversal (patternG enters exactly
+      // at that moment: right as price snaps back from piercing a band).
+      // If the freshest known price has already moved past the target or
+      // stop, the broker will reject this as invalid stops anyway; catching
+      // it here first gives a clearer, pattern-specific log instead of a
+      // generic broker error. Only checked when the chart's displayed
+      // symbol matches the autotrade symbol — otherwise state.price would
+      // be a different instrument's price and this check would be
+      // comparing apples to oranges, so it's skipped (order still
+      // attempted normally, same as before this check existed).
+      if(CONFIG.SYMBOL === AT.SYMBOL && typeof state.price === 'number'){
+        const stale = signal.direction === 'long'
+          ? (state.price >= signal.tp || state.price <= signal.sl)
+          : (state.price <= signal.tp || state.price >= signal.sl);
+        if(stale){
+          atLog('SIG', `${label}: 現在値(${fmt(state.price,3)})が既にTP/SLを通過しているため見送ります(シグナル検出時から値動きがありました)。`);
+          continue;
+        }
+      }
+
       try{
         const result = await placeOrder(signal.direction, signal.tp, signal.sl);
         atLog('ORD', `発注成功: ${label} ロット${AT.LOT_SIZE} ${JSON.stringify(result).slice(0,120)}`);

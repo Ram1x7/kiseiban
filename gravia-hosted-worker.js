@@ -143,6 +143,12 @@ async function handleDashboard(reqUrl, env) {
       SYMBOL: env.AUTOTRADE_SYMBOL || 'USDJPY',
       TIMEFRAME: env.AUTOTRADE_TIMEFRAME || '4h',
       LOT_SIZE: numOr(env.AUTOTRADE_LOT_SIZE, 0.01),
+      // Optional: if set (>0), lot size is computed per trade from this
+      // account-currency risk amount and the signal's SL distance, instead
+      // of always using the fixed LOT_SIZE above. See the caveat in
+      // index.html's computeRiskBasedLotSize() comment (assumes account
+      // currency == traded symbol's quote currency).
+      RISK_PER_TRADE: numOr(env.AUTOTRADE_RISK_PER_TRADE, 0),
       LOOKBACK_BARS: numOr(env.AUTOTRADE_LOOKBACK_BARS, 20),
       MAX_OPEN_POSITIONS: numOr(env.AUTOTRADE_MAX_OPEN_POSITIONS, 1),
       MAX_DAILY_LOSS: numOr(env.AUTOTRADE_MAX_DAILY_LOSS, 50),

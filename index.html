@@ -1644,11 +1644,59 @@ function backtestPatternL(higherCandles, lowerCandles){
   return results;
 }
 
-async function placeOrder(direction, tp, sl){
+// ---------------------------------------------------------
+// Risk-based lot sizing (opt-in via AT.RISK_PER_TRADE).
+//
+// Without this, every pattern uses the same fixed AT.LOT_SIZE regardless
+// of how wide its SL happens to be — and SL width varies enormously by
+// pattern, because several patterns derive TP/SL from a fixed BAR COUNT
+// (AT.LOOKBACK_BARS) on very different timeframes (1m for I/K's lower
+// leg vs 15m for most vs 1h/4h for L/D/F). 20 bars on a 1-minute chart is
+// ~20 minutes of range; 20 bars on a 4-hour chart is over 3 days — so the
+// same fixed lot size represents wildly different real money risk
+// depending on which pattern happens to fire. Opting into RISK_PER_TRADE
+// normalizes that: lot size is computed per signal so each trade risks
+// roughly the same account-currency amount if its SL is hit, regardless
+// of which pattern/timeframe produced it.
+//
+// IMPORTANT CAVEAT: this assumes the account's currency matches the
+// traded symbol's quote currency (e.g. a JPY account trading USDJPY, or
+// a USD account trading a USDxxx/xxxUSD pair) — this tool does no
+// currency-conversion of its own. If that assumption doesn't hold for
+// your account/symbol, the computed lot size will be wrong; leave
+// RISK_PER_TRADE unset (the default) to keep using the fixed AT.LOT_SIZE
+// instead.
+let symbolSpecCache = {};
+async function fetchSymbolSpecification(symbol){
+  if(symbolSpecCache[symbol]) return symbolSpecCache[symbol];
+  const spec = await metaApiFetch(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/symbols/${symbol}/specification`);
+  symbolSpecCache[symbol] = spec;
+  return spec;
+}
+
+// Computes a lot size sized so that a loss at `slPrice` costs roughly
+// AT.RISK_PER_TRADE (account currency, see caveat above). Returns null if
+// the inputs aren't usable (caller should fall back to AT.LOT_SIZE).
+function computeRiskBasedLotSize(entryPrice, slPrice, contractSize){
+  if(!(AT.RISK_PER_TRADE > 0)) return null;
+  const priceDistance = Math.abs(entryPrice - slPrice);
+  if(!(priceDistance > 0) || !(contractSize > 0)) return null;
+  const riskPerLot = priceDistance * contractSize;
+  if(!(riskPerLot > 0)) return null;
+  let lot = AT.RISK_PER_TRADE / riskPerLot;
+  // Safety clamp: never let a bad specification fetch or an extreme SL
+  // distance size a position wildly outside the configured base lot.
+  const minLot = 0.01;
+  const maxLot = AT.LOT_SIZE * 10;
+  lot = Math.max(minLot, Math.min(maxLot, lot));
+  return Math.round(lot * 100) / 100; // 0.01 lot step
+}
+
+async function placeOrder(direction, tp, sl, lotSize){
   const body = {
     actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
     symbol: AT.SYMBOL,
-    volume: AT.LOT_SIZE,
+    volume: lotSize || AT.LOT_SIZE,
     takeProfit: tp,
     stopLoss: sl,
     comment: 'gravia-auto',
@@ -1911,9 +1959,24 @@ async function autotradeTick(){
         }
       }
 
+      let lotSize = AT.LOT_SIZE;
+      if(AT.RISK_PER_TRADE > 0){
+        try{
+          const spec = await fetchSymbolSpecification(AT.SYMBOL);
+          const riskLot = computeRiskBasedLotSize(state.price, signal.sl, spec && spec.contractSize);
+          if(riskLot){
+            lotSize = riskLot;
+          } else {
+            atLog('SIG', `${label}: リスクベースのロット計算に失敗したため、既定ロット${AT.LOT_SIZE}を使用します。`);
+          }
+        }catch(specErr){
+          atLog('SIG', `${label}: 銘柄仕様の取得に失敗したため、既定ロット${AT.LOT_SIZE}を使用します(${specErr.message})。`);
+        }
+      }
+
       try{
-        const result = await placeOrder(signal.direction, signal.tp, signal.sl);
-        atLog('ORD', `発注成功: ${label} ロット${AT.LOT_SIZE} ${JSON.stringify(result).slice(0,120)}`);
+        const result = await placeOrder(signal.direction, signal.tp, signal.sl, lotSize);
+        atLog('ORD', `発注成功: ${label} ロット${lotSize} ${JSON.stringify(result).slice(0,120)}`);
         // Reflect immediately so a second signal later in this same loop
         // still respects the position cap, rather than only checking the
         // stale pre-tick count.
@@ -1993,7 +2056,8 @@ function renderAutotradeNote(){
     badge.textContent = '接続中';
     badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)'; badge.style.borderColor = 'var(--green)';
     const tfSummary = patternDefs().map(p=>`${p.key}:${formatPatternTimeframes(p)}`).join(' ');
-    note.textContent = `対象: ${AT.SYMBOL} / 各パターンの時間足(${tfSummary}) / ロット${AT.LOT_SIZE} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
+    const lotText = AT.RISK_PER_TRADE > 0 ? `1トレードあたりのリスク${fmtMoney(AT.RISK_PER_TRADE)}(SL幅に応じてロット自動調整)` : `ロット${AT.LOT_SIZE}`;
+    note.textContent = `対象: ${AT.SYMBOL} / 各パターンの時間足(${tfSummary}) / ${lotText} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
   } else if(!LIVE_MODE){
     note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。自動売買はLIVE接続時のみ有効です。';
   } else {

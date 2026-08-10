@@ -149,6 +149,11 @@ async function handleDashboard(reqUrl, env) {
       // entering, cutting down on low-conviction signals near the midline.
       RSI_THRESHOLD: numOr(env.AUTOTRADE_RSI_THRESHOLD, 50),
       POLL_MS: numOr(env.AUTOTRADE_POLL_MS, 30000),
+      // Comma-separated list of pattern keys (e.g. "I" or "I,K") to pull
+      // out of both live autotrade and the backtest-frequency check,
+      // without any code change — e.g. to pause a pattern that's
+      // empirically performing poorly in current market conditions.
+      DISABLED_PATTERNS: env.AUTOTRADE_DISABLED_PATTERNS || undefined,
       // Optional per-pattern timeframe overrides (each falls back to
       // TIMEFRAME above if unset on this Worker). Undefined keys are
       // dropped by JSON.stringify, so leaving a variable unset here is

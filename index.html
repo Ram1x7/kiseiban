@@ -1697,8 +1697,25 @@ function updateAutotradeUI(){
 // pattern F's 200-period EMA pushed the shared limit up to 300 for every
 // timeframe, including ones that only ever needed ~20-30.
 const CANDLE_FETCH_MARGIN = 50; // safety buffer added on top of each pattern's minLen
+
+// AT.DISABLED_PATTERNS lets specific patterns be pulled out of live
+// autotrade AND the backtest-frequency check (both consume patternDefs())
+// without touching code — e.g. a pattern that's empirically performing
+// poorly in the current market (like whipsaw losses from a momentum
+// pattern during a range-bound stretch) can be paused from Cloudflare
+// Variables alone. May arrive as a comma-separated string (Worker env
+// var) or an array (local config.js); pattern keys are matched
+// case-insensitively.
+function disabledPatternKeys(){
+  let raw = AT.DISABLED_PATTERNS;
+  if(typeof raw === 'string') raw = raw.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  if(!Array.isArray(raw)) raw = [];
+  return new Set(raw.map(k=>String(k).toUpperCase()));
+}
+
 function patternDefs(){
-  return [
+  const disabled = disabledPatternKeys();
+  const all = [
     { key:'A', timeframes: { main: AT.TIMEFRAME_A || AT.TIMEFRAME }, minLen: { main: 10+5 },
       detect: (byTf)=>detectSignal(byTf.main, 10, 'A'),
       backtest: (byTf)=>backtestSignals(byTf.main, 10, 'A') },
@@ -1740,6 +1757,7 @@ function patternDefs(){
       detect: (byTf)=>detectPatternL(byTf.higher, byTf.lower),
       backtest: (byTf)=>backtestPatternL(byTf.higher, byTf.lower) },
   ];
+  return disabled.size === 0 ? all : all.filter(d=>!disabled.has(d.key));
 }
 
 // Human-readable "key(tf)" or "key(role:tf/role:tf)" summary used in the
@@ -2274,8 +2292,15 @@ function renderHeaderAndCards(){
   document.getElementById('hTime').textContent = new Date().toTimeString().slice(0,8);
 
   document.getElementById('eqVal').textContent = fmtMoney(state.equity);
-  const growth = ((state.equity-1.52)/1.52*100);
-  document.getElementById('eqDelta').textContent = '▲ '+fmt(growth,1)+'% · '+state.trades+' trades';
+  // In LIVE_MODE, growth is measured against this session's first observed
+  // equity (liveInitialEquity), not the decorative 1.52 simulation-mode
+  // starting balance — using that fixed constant against a real account's
+  // equity (thousands of dollars) previously produced a meaningless
+  // multi-million-percent figure.
+  const growthBase = LIVE_MODE ? (liveInitialEquity || state.equity) : 1.52;
+  const growth = growthBase ? ((state.equity-growthBase)/growthBase*100) : 0;
+  const growthSign = growth >= 0 ? '▲' : '▼';
+  document.getElementById('eqDelta').textContent = growthSign+' '+fmt(Math.abs(growth),1)+'% · '+state.trades+' trades';
   document.getElementById('eqTrades').textContent = state.trades;
   document.getElementById('eqWin').textContent = fmt(winPct,1)+'%';
   document.getElementById('eqAvg').textContent = fmtMoney(state.trades? state.pnl/state.trades : 0);

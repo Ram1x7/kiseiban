@@ -1342,6 +1342,111 @@ function backtestPatternM(candles){
 }
 
 // =========================================================
+// PATTERN N — Trendline convergence / channel breakout.
+//
+// A single mechanism covering several classically-named chart patterns
+// that all share the exact same trading logic (two trendlines connecting
+// recent swing highs/lows, price eventually breaking out beyond one of
+// them): ascending/descending/symmetrical triangles, rectangles, rising/
+// falling wedges, and bull/bear flags & pennants. Rather than
+// separately naming which exact shape occurred, this detects the shared
+// underlying structure (a converging-or-parallel channel) and trades the
+// breakout — which is the actual entry signal for every one of those
+// named patterns anyway. Deliberately excludes broadening/diverging
+// structures (megaphone pattern, broadening formation), matching the
+// earlier assessment that those are harder to codify reliably.
+//
+//   1) Fit a line through the two most recent confirmed swing highs
+//      (upper boundary) and another through the two most recent
+//      confirmed swing lows (lower boundary)
+//   2) The channel must be converging or parallel, not widening, over
+//      its own span (excludes broadening formations)
+//   3) Entry: the first candle to close beyond either boundary
+//      (extrapolated to that candle's position), confirmed in the
+//      breakout direction
+//   TP: the channel's width at its start (its widest point), projected
+//     from the breakout price — the classic "measured move" target used
+//     for all of these named patterns. SL: the opposite boundary line's
+//     current (extrapolated) value.
+// =========================================================
+
+// Returns {slope, intercept} for the line through two (index, price)
+// points, so its value at any index i is `intercept + slope*i`.
+function fitTrendline(idxA, priceA, idxB, priceB){
+  if(idxB === idxA) return null;
+  const slope = (priceB-priceA) / (idxB-idxA);
+  const intercept = priceA - slope*idxA;
+  return { slope, intercept };
+}
+function trendlineValueAt(line, idx){ return line.intercept + line.slope*idx; }
+
+function detectPatternN(candles){
+  const lastIdx = candles.length-1;
+  const minLen = DOW_PIVOT_WING*4 + 10;
+  if(candles.length < minLen) return null;
+
+  const { highs, lows } = findSwingPivots(candles, lastIdx-1, DOW_PIVOT_WING);
+  if(highs.length < 2 || lows.length < 2) return null;
+
+  const h2 = highs[highs.length-1], h1 = highs[highs.length-2];
+  const l2 = lows[lows.length-1], l1 = lows[lows.length-2];
+  const upper = fitTrendline(h1.idx, h1.price, h2.idx, h2.price);
+  const lower = fitTrendline(l1.idx, l1.price, l2.idx, l2.price);
+  if(!upper || !lower) return null;
+
+  // Channel must be converging or parallel across the span covered by
+  // these pivots, not widening (excludes broadening/diverging shapes).
+  const earliestIdx = Math.min(h1.idx, l1.idx);
+  const latestPivotIdx = Math.max(h2.idx, l2.idx);
+  const gapAtStart = trendlineValueAt(upper, earliestIdx) - trendlineValueAt(lower, earliestIdx);
+  const gapAtEnd = trendlineValueAt(upper, latestPivotIdx) - trendlineValueAt(lower, latestPivotIdx);
+  if(!(gapAtStart > 0) || !(gapAtEnd > 0) || gapAtEnd > gapAtStart) return null;
+
+  // Each trendline is fit from only 2 points, so extrapolating it too far
+  // past those points becomes unreliable — and can even invert the
+  // channel (lower line projecting above the upper line). Cap how far
+  // past the most recent pivot a breakout is still honored, matching the
+  // real-world convention that a chart pattern "expires" if price
+  // doesn't break out within a reasonable time of completing.
+  const pivotSpan = Math.max(h2.idx-h1.idx, l2.idx-l1.idx);
+  if(lastIdx - latestPivotIdx > pivotSpan*2) return null;
+
+  const last = candles[lastIdx];
+  const prev = candles[lastIdx-1];
+  const upperAtLast = trendlineValueAt(upper, lastIdx);
+  const upperAtPrev = trendlineValueAt(upper, lastIdx-1);
+  const lowerAtLast = trendlineValueAt(lower, lastIdx);
+  const lowerAtPrev = trendlineValueAt(lower, lastIdx-1);
+  // Defensive: if the two lines have inverted (crossed) by this point
+  // despite the cap above, the channel is no longer coherent — bail out
+  // rather than evaluate a breakout against nonsensical boundary values.
+  if(upperAtLast <= lowerAtLast || upperAtPrev <= lowerAtPrev) return null;
+
+  // Upward breakout -> LONG. Edge-triggered: only the first candle to
+  // close above the (extrapolated) upper boundary counts.
+  if(last.close > upperAtLast && prev.close <= upperAtPrev && last.close > last.open){
+    const tp = last.close + gapAtStart;
+    return { direction:'long', tp, sl: lowerAtLast, signalId: String(last.time||lastIdx), patternKey:'N' };
+  }
+  // Downward breakout -> SHORT.
+  if(last.close < lowerAtLast && prev.close >= lowerAtPrev && last.close < last.open){
+    const tp = last.close - gapAtStart;
+    return { direction:'short', tp, sl: upperAtLast, signalId: String(last.time||lastIdx), patternKey:'N' };
+  }
+  return null;
+}
+
+function backtestPatternN(candles){
+  const minLen = DOW_PIVOT_WING*4 + 10;
+  const results = [];
+  for(let i=minLen-1; i<candles.length; i++){
+    const sig = detectPatternN(candles.slice(0, i+1));
+    if(sig) results.push({ direction: sig.direction, patternKey:'N', time: candles[i].time, index: i });
+  }
+  return results;
+}
+
+// =========================================================
 // PATTERN I — RSI scalping across a higher/lower timeframe pair.
 //   1) RSI(14) on the higher timeframe is above 50 (bullish) or below 50
 //      (bearish)
@@ -1908,6 +2013,9 @@ function patternDefs(){
     { key:'M', timeframes: { main: AT.TIMEFRAME_M || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*4+10 },
       detect: (byTf)=>detectPatternM(byTf.main),
       backtest: (byTf)=>backtestPatternM(byTf.main) },
+    { key:'N', timeframes: { main: AT.TIMEFRAME_N || AT.TIMEFRAME }, minLen: { main: DOW_PIVOT_WING*4+10 },
+      detect: (byTf)=>detectPatternN(byTf.main),
+      backtest: (byTf)=>backtestPatternN(byTf.main) },
   ];
   return disabled.size === 0 ? all : all.filter(d=>!disabled.has(d.key));
 }

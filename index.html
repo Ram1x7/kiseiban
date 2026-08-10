@@ -1957,6 +1957,22 @@ async function autotradeTick(){
           atLog('SIG', `${label}: 現在値(${fmt(state.price,3)})が既にTP/SLを通過しているため見送ります(シグナル検出時から値動きがありました)。`);
           continue;
         }
+
+        // Minimum reward:risk filter. TP/SL are both computed from the
+        // same recent-high/low lookback window with no relationship
+        // enforced between the two, so a signal can legitimately have a
+        // narrower reward than its risk (a structurally "small win, big
+        // loss" trade even before considering win rate). Requiring
+        // reward >= risk rejects those up front instead of taking them.
+        // Same CONFIG.SYMBOL===AT.SYMBOL guard as the staleness check
+        // above, since this also needs state.price as the entry-price
+        // stand-in to split the TP/SL span into a reward and risk side.
+        const reward = signal.direction === 'long' ? signal.tp - state.price : state.price - signal.tp;
+        const risk = signal.direction === 'long' ? state.price - signal.sl : signal.sl - state.price;
+        if(reward < risk){
+          atLog('SIG', `${label}: 利確までの値幅(${fmt(reward,3)})が損切りまでの値幅(${fmt(risk,3)})より狭いため見送ります。`);
+          continue;
+        }
       }
 
       let lotSize = AT.LOT_SIZE;

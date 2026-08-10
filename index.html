@@ -907,9 +907,15 @@ function detectICTSignal(candles, patternKey){
       const setup = ictSetupAfterSweep(candles, sweepIdx, direction);
       if(!setup || setup.readyFromIdx > lastIdx) continue;
       const c = candles[lastIdx];
+      const prevC = candles[lastIdx-1];
       const touches = c.low <= setup.zoneHigh && c.high >= setup.zoneLow;
+      // Same fresh-entry requirement as patternE/H: without it, price
+      // consolidating inside the OB/FVG zone for several bars while each
+      // candle happens to confirm in the right direction would re-fire
+      // (and re-enter) on every one of those candles.
+      const prevTouched = prevC.low <= setup.zoneHigh && prevC.high >= setup.zoneLow;
       const confirmed = direction === 'long' ? c.close >= c.open : c.close <= c.open;
-      if(touches && confirmed){
+      if(touches && !prevTouched && confirmed){
         const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
         const tp = direction==='long' ? Math.max(...lookback.map(x=>x.high)) : Math.min(...lookback.map(x=>x.low));
         const sl = direction==='long' ? candles[setup.sweepIdx].low : candles[setup.sweepIdx].high;
@@ -1097,13 +1103,22 @@ function detectPatternE(candles){
   const downtrend = lastHigh.price < prevHigh.price && lastLow.price < prevLow.price;
 
   const last = candles[lastIdx];
+  const prev = candles[lastIdx-1];
   const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
 
-  if(uptrend && last.close > lastHigh.price){
+  // "close > the broken level" is a STATE that stays true for as long as
+  // the trend continues (potentially dozens of candles), not a one-time
+  // event like patterns A/B/D/F/G's touch/cross/resumption conditions.
+  // Without requiring the PREVIOUS candle to still be on the other side
+  // of the level, this would re-fire (and re-enter, stacking correlated
+  // positions with similar SL) on every single candle for as long as
+  // price stays broken out — the same class of bug patternI had before
+  // being made edge-triggered.
+  if(uptrend && last.close > lastHigh.price && prev.close <= lastHigh.price){
     const tp = Math.max(...lookback.map(c=>c.high));
     return { direction:'long', tp, sl: lastLow.price, signalId: String(last.time || lastIdx), patternKey:'E' };
   }
-  if(downtrend && last.close < lastLow.price){
+  if(downtrend && last.close < lastLow.price && prev.close >= lastLow.price){
     const tp = Math.min(...lookback.map(c=>c.low));
     return { direction:'short', tp, sl: lastHigh.price, signalId: String(last.time || lastIdx), patternKey:'E' };
   }
@@ -1202,6 +1217,7 @@ function detectPatternH(candles){
   const lastHigh = highs[highs.length-1];
   const lastLow = lows[lows.length-1];
   const last = candles[lastIdx];
+  const prev = candles[lastIdx-1];
 
   // LONG: most recent impulse leg runs low -> high
   if(lastHigh.idx > lastLow.idx && lastHigh.price > lastLow.price){
@@ -1209,7 +1225,14 @@ function detectPatternH(candles){
     const zoneHigh = B - (B-A)*FIB_ZONE_START;
     const zoneLow = B - (B-A)*FIB_ZONE_END;
     const touches = last.low <= zoneHigh && last.high >= zoneLow;
-    if(touches && last.close > last.open){
+    // Require this to be a FRESH entry into the zone (previous candle
+    // wasn't already inside it) — otherwise, price consolidating inside
+    // the golden zone for several bars while each happens to close
+    // bullish would re-fire (and re-enter) on every one of those candles,
+    // the same class of bug patternE had before this same check was added
+    // there.
+    const prevTouched = prev.low <= zoneHigh && prev.high >= zoneLow;
+    if(touches && !prevTouched && last.close > last.open){
       const tp = B + (B-A)*FIB_EXTENSION;
       return { direction:'long', tp, sl:A, signalId: String(last.time || lastIdx), patternKey:'H' };
     }
@@ -1221,7 +1244,8 @@ function detectPatternH(candles){
     const zoneLow = B + (A-B)*FIB_ZONE_START;
     const zoneHigh = B + (A-B)*FIB_ZONE_END;
     const touches = last.low <= zoneHigh && last.high >= zoneLow;
-    if(touches && last.close < last.open){
+    const prevTouched = prev.low <= zoneHigh && prev.high >= zoneLow;
+    if(touches && !prevTouched && last.close < last.open){
       const tp = B - (A-B)*FIB_EXTENSION;
       return { direction:'short', tp, sl:A, signalId: String(last.time || lastIdx), patternKey:'H' };
     }

@@ -83,5 +83,6 @@ const CONFIG = {
     // TIMEFRAME_K_LOW: '1m',
     // TIMEFRAME_L_HIGH: '1h',
     // TIMEFRAME_L_LOW: '15m',
+    // TIMEFRAME_M: '15m',
   },
 };

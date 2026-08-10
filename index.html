@@ -1033,8 +1033,70 @@ function trendPullbackSignal(candles, direction, patternKey, emaPeriod){
   return { direction, tp, sl, signalId, patternKey };
 }
 
-function detectPatternD(candles){ return trendPullbackSignal(candles, 'long', 'D', PATTERN_D_EMA_PERIOD); }
-function detectPatternF(candles){ return trendPullbackSignal(candles, 'short', 'F', PATTERN_F_EMA_PERIOD); }
+// Alternative entry for D/F: a rising channel (D) is bounded below by a
+// trendline through its last two confirmed swing lows; a falling channel
+// (F) is bounded above by a trendline through its last two confirmed swing
+// highs (same findSwingPivots/fitTrendline infrastructure as patterns M/N).
+// Rather than waiting for a pullback-and-resumption off the EMA, this fires
+// the moment price touches that channel boundary and rejects back inside —
+// the classic "buy the dip on the rising channel's support line" (D) /
+// "sell the rally on the falling channel's resistance line" (F) entry.
+// Still requires the same EMA trend confirmation as trendPullbackSignal, so
+// it only ever adds signals on top of an already-confirmed trend, never on
+// a channel that runs counter to it.
+function channelTouchSignal(candles, direction, patternKey, emaPeriod){
+  const minLen = Math.max(emaPeriod + TREND_SLOPE_LOOKBACK, DOW_PIVOT_WING*4+10) + 2;
+  if(candles.length < minLen) return null;
+  const closes = candles.map(c=>c.close);
+  const emaVals = emaSeries(closes, emaPeriod);
+  const lastIdx = candles.length-1;
+  const ema = emaVals[lastIdx];
+  const emaPast = emaVals[lastIdx-TREND_SLOPE_LOOKBACK];
+  if(ema==null || emaPast==null) return null;
+  if(direction==='long' && !(ema > emaPast)) return null;
+  if(direction==='short' && !(ema < emaPast)) return null;
+
+  const { highs, lows } = findSwingPivots(candles, lastIdx-1, DOW_PIVOT_WING);
+  const pivots = direction==='long' ? lows : highs;
+  if(pivots.length < 2) return null;
+  const p2 = pivots[pivots.length-1], p1 = pivots[pivots.length-2];
+  const line = fitTrendline(p1.idx, p1.price, p2.idx, p2.price);
+  if(!line) return null;
+  // the channel boundary must slope in the trend direction (rising support
+  // for D, falling resistance for F) — a flat or opposing-slope line isn't
+  // a channel, it's just the last two pivots of a different structure.
+  if(direction==='long' && !(line.slope > 0)) return null;
+  if(direction==='short' && !(line.slope < 0)) return null;
+
+  const last = candles[lastIdx];
+  const prev = candles[lastIdx-1];
+  const lineAtLast = trendlineValueAt(line, lastIdx);
+  const lineAtPrev = trendlineValueAt(line, lastIdx-1);
+
+  let touched;
+  if(direction==='long'){
+    touched = last.low <= lineAtLast && last.close > lineAtLast && last.close > last.open;
+    if(prev.low <= lineAtPrev) touched = false; // edge-trigger: already touching last candle, not a fresh bounce
+  } else {
+    touched = last.high >= lineAtLast && last.close < lineAtLast && last.close < last.open;
+    if(prev.high >= lineAtPrev) touched = false;
+  }
+  if(!touched) return null;
+
+  const lookback = candles.slice(Math.max(0, lastIdx-AT.LOOKBACK_BARS), lastIdx+1);
+  const tp = direction==='long' ? Math.max(...lookback.map(c=>c.high)) : Math.min(...lookback.map(c=>c.low));
+  const sl = direction==='long' ? Math.min(last.low, lineAtLast) : Math.max(last.high, lineAtLast);
+
+  const signalId = String(last.time || lastIdx);
+  return { direction, tp, sl, signalId, patternKey };
+}
+
+function trendPullbackOrChannelSignal(candles, direction, patternKey, emaPeriod){
+  return trendPullbackSignal(candles, direction, patternKey, emaPeriod) || channelTouchSignal(candles, direction, patternKey, emaPeriod);
+}
+
+function detectPatternD(candles){ return trendPullbackOrChannelSignal(candles, 'long', 'D', PATTERN_D_EMA_PERIOD); }
+function detectPatternF(candles){ return trendPullbackOrChannelSignal(candles, 'short', 'F', PATTERN_F_EMA_PERIOD); }
 
 // Backtest scan: re-runs the same live check on every growing prefix of
 // the series, rather than a bespoke forward scan — the EMA/pullback check
@@ -1043,7 +1105,7 @@ function backtestTrendPullbackSignals(candles, direction, patternKey, emaPeriod)
   const minLen = emaPeriod + TREND_SLOPE_LOOKBACK + PULLBACK_MIN_BARS + 2;
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
-    const sig = trendPullbackSignal(candles.slice(0, i+1), direction, patternKey, emaPeriod);
+    const sig = trendPullbackOrChannelSignal(candles.slice(0, i+1), direction, patternKey, emaPeriod);
     if(sig) results.push({ direction, patternKey, time: candles[i].time, index: i });
   }
   return results;

@@ -68,7 +68,7 @@
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
 
   /* ---------- GRID ---------- */
-  .grid-row1{ display:grid; grid-template-columns: 1.1fr 1.6fr 1.3fr; gap:10px; margin-bottom:10px; }
+  .grid-row1{ display:grid; grid-template-columns: 1.6fr 1fr; gap:10px; margin-bottom:10px; }
   .panel{
     border:1px solid var(--line); border-radius:6px;
     background:var(--panel);
@@ -86,16 +86,6 @@
     background:var(--green-dim); color:var(--green); border:1px solid var(--green);
   }
 
-  /* Equity Card */
-  .equity-id{ font-size:11px; color:#fff; font-weight:700; }
-  .equity-val{ font-size:32px; font-weight:800; color:#fff; margin:4px 0 2px; }
-  .equity-delta{ font-size:11px; margin-bottom:8px; }
-  .equity-delta.up{ color:var(--green); }
-  .equity-foot{ display:flex; gap:16px; margin-top:8px; }
-  .equity-foot .k{ color:var(--txt-dim); font-size:9px; display:block; }
-  .equity-foot .v{ font-size:13px; font-weight:700; color:#fff; }
-  canvas.spark{ width:100%; height:34px; margin-top:6px; }
-
   /* Candle panel */
   .price-now{ font-size:18px; font-weight:800; color:#fff; }
   .price-tag{ color:var(--txt-dim); font-size:9px; }
@@ -103,40 +93,13 @@
   .book{ position:absolute; right:10px; top:34px; font-size:9px; color:var(--txt-dim); text-align:right; line-height:1.5; }
   .book b{ color:#fff; }
 
-  /* Streak panel */
-  .streak-row{ display:flex; align-items:center; gap:10px; }
-  .streak-x{ color:var(--pink); font-weight:800; font-size:20px; }
-  .streak-n{ color:var(--green); font-weight:800; font-size:20px; }
-  canvas#streakbar{ width:100%; height:44px; margin-top:8px; }
-  .streak-foot{ display:flex; justify-content:space-between; margin-top:6px; color:var(--txt-dim); font-size:9px; }
-  .streak-foot b{ color:#fff; font-size:11px; display:block; }
-
-  /* MicroFish */
-  .microfish-wrap{ margin-bottom:10px; }
-  .mf-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
-  .legend{ display:flex; gap:12px; position:absolute; left:12px; top:30px; font-size:9px; color:var(--txt-dim); z-index:2; }
-  .legend span{ display:flex; align-items:center; gap:4px; margin-bottom:5px; }
-  .dot{ width:6px; height:6px; border-radius:50%; display:inline-block; }
-  .mf-note{ position:absolute; left:12px; top:46px; font-size:8px; color:var(--txt-dim); z-index:2; opacity:0.7; }
-  canvas#microfish{ width:100%; height:230px; display:block; }
-  .mf-stats{ position:absolute; right:12px; top:30px; text-align:right; font-size:9px; color:var(--txt-dim); z-index:2; }
-  .mf-stats b{ color:#fff; font-size:11px; }
-
-  /* Row 3 */
-  .grid-row3{ display:grid; grid-template-columns: 1.2fr 1.3fr 1fr; gap:10px; margin-bottom:10px; }
-  canvas#equitycurve{ width:100%; height:150px; display:block; }
-  .curve-total{ position:absolute; left:12px; top:28px; font-size:9px; color:var(--txt-dim); }
-  .curve-total b{ color:var(--green); font-size:13px; display:block;}
-
-  table.trades{ width:100%; border-collapse:collapse; font-size:10px; }
-  table.trades th{ text-align:right; color:var(--txt-dim); font-weight:400; padding:3px 4px; font-size:9px; }
-  table.trades th:first-child, table.trades td:first-child{ text-align:left; }
-  table.trades td{ text-align:right; padding:3px 4px; color:#fff; border-top:1px solid var(--line); }
-  table.trades td.up{ color:var(--green); }
-  table.trades td.dn{ color:var(--pink); }
-
-  .vol-charts canvas{ width:100%; height:60px; display:block; margin-bottom:6px; }
-  .vol-label{ display:flex; justify-content:space-between; font-size:9px; color:var(--txt-dim); }
+  /* Signal history table */
+  table.signals{ width:100%; border-collapse:collapse; font-size:10px; }
+  table.signals th{ text-align:right; color:var(--txt-dim); font-weight:400; padding:3px 4px; font-size:9px; }
+  table.signals th:first-child, table.signals td:first-child{ text-align:left; }
+  table.signals td{ text-align:right; padding:3px 4px; color:#fff; border-top:1px solid var(--line); }
+  table.signals td.up{ color:var(--green); }
+  table.signals td.dn{ color:var(--pink); }
 
   /* Execution log */
   .logpanel{ height:150px; display:flex; flex-direction:column; }
@@ -146,11 +109,8 @@
   .logline{ white-space:nowrap; color:var(--txt-dim); }
   .logline .t{ color:#4d5266; margin-right:8px; }
   .logline .tag{ display:inline-block; width:34px; font-weight:700; }
-  .tag.WIN{ color:var(--green); }
-  .tag.IN{ color:var(--amber); }
-  .tag.TICK{ color:#7a8bff; }
   .tag.SIG{ color:var(--amber); }
-  .tag.ORD{ color:#7a8bff; }
+  .tag.ALERT{ color:var(--green); }
   .tag.ERR{ color:var(--pink); }
   .logline .msg{ color:var(--txt); }
   .logline .px{ color:#fff; }
@@ -177,11 +137,6 @@
   }
   .at-btn:disabled{ opacity:0.4; cursor:not-allowed; }
   .at-btn:hover:not(:disabled){ border-color:var(--pink); }
-  .at-pnl-reset-btn{
-    background:none; border:none; color:var(--txt-dim); font-size:9px; padding:0;
-    margin-top:2px; cursor:pointer; text-decoration:underline; letter-spacing:0.5px; text-align:left;
-  }
-  .at-pnl-reset-btn:hover{ color:var(--pink); }
   .at-backtest-result{ margin-top:8px; color:var(--txt); font-size:11px; line-height:1.7; white-space:pre-wrap; }
   .symbol-row{ display:none; align-items:center; gap:8px; margin-bottom:8px; }
   .symbol-row .k{ color:var(--txt-dim); font-size:9px; letter-spacing:1px; }
@@ -205,16 +160,13 @@
   </div>
   <div class="hstats">
     <div class="item"><span class="label">PRICE</span><span class="val" id="hPrice">$0.00</span></div>
-    <div class="item"><span class="label">PNL</span><span class="val green" id="hPnl">$0.00</span></div>
-    <div class="item"><span class="label">TRADES</span><span class="val" id="hTrades">0/0</span></div>
-    <div class="item"><span class="label">WIN RATE</span><span class="val pink" id="hWin">0.0%</span></div>
     <div class="item"><span class="label">TIME</span><span class="val" id="hTime">00:00:00</span></div>
   </div>
 </header>
 
 <div class="panel autotrade-panel" id="autotradePanel">
   <div class="panel-title">
-    <span>自動売買(複数パターンを並行判定・詳細はREADME参照) — 参考実装・利益を保証しません</span>
+    <span>サイン検知(複数パターンを並行判定・詳細はREADME参照) — 発注は一切行いません。表示された内容を参考に、ご自身の判断・操作でエントリーしてください</span>
     <span class="badge" id="atModeBadge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">要MetaApi接続</span>
   </div>
   <div class="symbol-row" id="symbolRow">
@@ -224,36 +176,19 @@
   <div class="at-row">
     <label class="at-toggle">
       <input type="checkbox" id="atEnableToggle" disabled>
-      <span>自動売買 <b id="atToggleState">OFF</b></span>
+      <span>シグナル監視 <b id="atToggleState">OFF</b></span>
     </label>
-    <div class="at-stat"><span class="k">本日の損益</span><span class="v" id="atDailyPnl">$0.00</span><button type="button" class="at-pnl-reset-btn" id="atPnlResetBtn" title="画面上の表示だけを0にリセットします。実際の口座履歴・日次損失上限の判定には影響しません">表示リセット</button></div>
-    <div class="at-stat"><span class="k">保有ポジション</span><span class="v" id="atOpenPositions">0 / 1</span></div>
-    <div class="at-stat"><span class="k">直近判定</span><span class="v" id="atLastSignal">—</span></div>
+    <button type="button" class="at-btn" id="atNotifyBtn">🔔 通知を許可</button>
     <button class="at-btn" id="atBacktestBtn" disabled>過去のシグナル頻度を確認</button>
     <button class="at-btn" id="atPnlBacktestBtn" disabled title="各シグナルのTP/SLが過去データ上で実際にどちらへ到達したかを検証します(参考値)">勝率・期待値を検証(参考値)</button>
   </div>
-  <div class="at-note" id="atNote">MetaApiに接続され、config.jsで AUTOTRADE.ENABLED が true の場合のみ有効化されます。デモ口座での動作確認を強く推奨します。</div>
+  <div class="at-stat" style="margin-top:8px;"><span class="k">直近シグナル</span><span class="v" id="atLastSignal">—</span></div>
+  <div class="at-note" id="atNote">MetaApiに接続され、config.jsで AUTOTRADE.ENABLED が true の場合のみ有効化されます。</div>
   <div class="at-backtest-result" id="atBacktestResult"></div>
   <div class="at-backtest-result" id="atPnlBacktestResult"></div>
 </div>
 
 <div class="grid-row1">
-
-  <!-- Equity card -->
-  <div class="panel glow-pink">
-    <div class="panel-title">
-      <span>GRAVIA_001 · ACTIVE</span>
-      <span class="badge">LIVE</span>
-    </div>
-    <div class="equity-val" id="eqVal">$1.52</div>
-    <div class="equity-delta up" id="eqDelta">▲ 0.0% · 0 trades</div>
-    <canvas class="spark" id="eqSpark"></canvas>
-    <div class="equity-foot">
-      <div><span class="k">TRADES</span><span class="v" id="eqTrades">0</span></div>
-      <div><span class="k">WIN%</span><span class="v" id="eqWin">100.0%</span></div>
-      <div><span class="k">AVG/TR</span><span class="v" id="eqAvg">$0.00</span></div>
-    </div>
-  </div>
 
   <!-- Candle chart -->
   <div class="panel">
@@ -266,67 +201,13 @@
     <div class="book" id="book"></div>
   </div>
 
-  <!-- Streak card -->
-  <div class="panel glow-green">
-    <div class="panel-title">
-      <span>#1 TRADER · LIVE STREAK</span>
-    </div>
-    <div class="streak-row">
-      <span class="streak-x">X</span>
-      <span class="streak-n" id="streakN">+0</span>
-    </div>
-    <canvas id="streakbar"></canvas>
-    <div class="streak-foot">
-      <div><b id="streakBest">0</b>BEST</div>
-      <div><b id="streakGain">+0%</b>GAIN</div>
-      <div><b id="streakDur">00:00</b>DUR</div>
-    </div>
-  </div>
-</div>
-
-<!-- MicroFish -->
-<div class="panel microfish-wrap" style="position:relative;">
-  <div class="mf-head panel-title">
-    <span id="microfishSymbolLabel">MICROFISH · BTC</span>
-    <span id="mfPnl" class="badge" style="background:var(--pink-dim); color:var(--pink); border-color:var(--pink);">+$0.00</span>
-  </div>
-  <div class="legend">
-    <span><i class="dot" style="background:var(--pink)"></i>BEAR(陰線/負け/含み損)</span>
-    <span><i class="dot" style="background:var(--green)"></i>BULL(陽線/勝ち/含み益)</span>
-  </div>
-  <div class="mf-note">小=直近ローソク足 / 大=保有中ポジション / 残り続ける点=過去の約定</div>
-  <div class="mf-stats">
-    <div><b id="mfConf">100.0%</b> WIN%</div>
-    <div id="mfNodes">0 NODES</div>
-    <div id="mfLinks">0 LINKS</div>
-  </div>
-  <canvas id="microfish"></canvas>
-</div>
-
-<div class="grid-row3">
-  <!-- Equity curve -->
-  <div class="panel" style="position:relative;">
-    <div class="panel-title"><span>TOTAL EQUITY</span></div>
-    <div class="curve-total"><b id="curveVal">+$0.00</b>T <span id="curveT">0</span> · W <span id="curveW">100.0%</span></div>
-    <canvas id="equitycurve"></canvas>
-  </div>
-
-  <!-- Trades table -->
+  <!-- Signal history -->
   <div class="panel">
-    <div class="panel-title"><span>RECENT FILLS</span></div>
-    <table class="trades" id="tradesTable">
-      <thead><tr><th>PRICE</th><th>WIN%</th><th>PNL</th></tr></thead>
-      <tbody id="tradesBody"></tbody>
+    <div class="panel-title"><span>SIGNAL HISTORY</span></div>
+    <table class="signals" id="signalsTable">
+      <thead><tr><th>PATTERN</th><th>DIR</th><th>PRICE</th><th>TP</th><th>SL</th></tr></thead>
+      <tbody id="signalsBody"></tbody>
     </table>
-  </div>
-
-  <!-- Volume -->
-  <div class="panel vol-charts">
-    <div class="panel-title"><span>VOLUME</span></div>
-    <canvas id="volPink"></canvas>
-    <div class="vol-label"><span id="volPinkLabel">0</span><span>SELL</span></div>
-    <canvas id="volGreen"></canvas>
-    <div class="vol-label"><span id="volGreenLabel">0</span><span>BUY</span></div>
   </div>
 </div>
 
@@ -336,7 +217,7 @@
   <div class="logbody" id="logBody"></div>
 </div>
 
-<div class="footer-note">GRAVIA DASHBOARD — 全データはシミュレーションです。実データ接続については README を参照してください。</div>
+<div class="footer-note">GRAVIA SIGNAL TOOL — 全データはシミュレーションです。実データ接続については README を参照してください。発注は一切行いません。</div>
 
 <script src="config.js"></script>
 <script>
@@ -356,11 +237,10 @@ if(typeof CONFIG === 'undefined'){
 if(CONFIG.WORKER_PROXY_URL === undefined) CONFIG.WORKER_PROXY_URL = '';
 if(!CONFIG.CURRENCY_SYMBOL) CONFIG.CURRENCY_SYMBOL = '$';
 if(!CONFIG.AUTOTRADE){
-  // 古いconfig.js(自動売買追加前)を使っている場合の安全なフォールバック。
-  // ENABLEDがfalseなので、これだけでは絶対に発注されない。
+  // 古いconfig.js(サイン機能追加前)を使っている場合の安全なフォールバック。
   CONFIG.AUTOTRADE = {
-    ENABLED:false, SYMBOL:'USDJPY', TIMEFRAME:'4h', LOT_SIZE:0.01, LOOKBACK_BARS:20,
-    MAX_OPEN_POSITIONS:1, MAX_DAILY_LOSS:50, PINBAR_WICK_MULT:1.5, PINBAR_WICK_RATIO:0.5, POLL_MS:30000,
+    ENABLED:false, SYMBOL:'USDJPY', TIMEFRAME:'4h', LOOKBACK_BARS:20,
+    PINBAR_WICK_MULT:1.5, PINBAR_WICK_RATIO:0.5, POLL_MS:30000,
     RSI_THRESHOLD:50,
   };
 }
@@ -392,27 +272,14 @@ const MARKET_DATA_BASE = `https://mt-market-data-client-api-v1.${CONFIG.METAAPI_
 
 // ---------- State ----------
 const state = {
-  equity: 1.52,
-  equityHistory: [1.52],
   price: 78150.00,
   priceHistory: [],
   candles: [],
-  trades: 0,
-  totalTrades: 268,
-  wins: 0,
-  streak: 0,
-  bestStreak: 0,
-  pnl: 0,
   logs: [],
-  sellVols: [],
-  buyVols: [],
-  nodes: null,
-  // Persistent MicroFish dots for each closed trade this bot placed (see
-  // pushTradeNode()) — win trades stay green, loss trades stay pink,
-  // forever (until the 40-node cap ages the oldest ones out), unlike the
-  // candle/position dots which are recomputed fresh every render.
-  tradeNodes: [],
-  positions: [],
+  // History of past alerted signals (see autotradeTick()'s alert dispatch),
+  // newest first — feeds the "SIGNAL HISTORY" table so a signal the user
+  // missed (sound/notification not seen) is still visible on screen.
+  signalHistory: [],
 };
 
 function rnd(min, max){ return Math.random()*(max-min)+min; }
@@ -423,7 +290,9 @@ function fmtMoney(n){
   return CONFIG.CURRENCY_SYMBOL+fmt(n,2);
 }
 
-// ---------- Simulated data source (swap point) ----------
+// ---------- Simulated data source (swap point, used only when no MetaApi
+// connection is configured — a pure price/candle random walk for demo
+// purposes, no trade-outcome simulation) ----------
 function simulateTick(){
   // price random walk
   state.price += rnd(-40, 46);
@@ -440,90 +309,12 @@ function simulateTick(){
     if(state.candles.length > 26) state.candles.shift();
   }
 
-  // occasional trade event
-  if(Math.random() < 0.55){
-    state.trades += 1;
-    const win = Math.random() < 0.86; // high win rate like the reference
-    if(win){ state.wins += 1; state.streak += 1; }
-    else { state.streak = 0; }
-    state.bestStreak = Math.max(state.bestStreak, state.streak);
-
-    const pnlTrade = win ? rnd(0.4, state.equity*0.18+2) : -rnd(0.2, state.equity*0.08+1);
-    state.equity = Math.max(0.2, state.equity + pnlTrade);
-    state.pnl += pnlTrade;
-    state.equityHistory.push(state.equity);
-    if(state.equityHistory.length > 200) state.equityHistory.shift();
-
-    const winPct = (state.trades? (state.wins/state.trades*100):100);
-    state.trades = Math.min(state.trades, state.totalTrades);
-
-    // trades table row
-    state.lastTrade = {
-      price: state.price,
-      winPct,
-      pnl: pnlTrade
-    };
-    pushTradeRow(state.lastTrade);
-
-    // log line
-    pushLog(win, state.price, pnlTrade);
-    pushTradeNode(win, pnlTrade);
-
-    // volumes
-    state.sellVols.push(rnd(2,60));
-    state.buyVols.push(rnd(2,60));
-    if(state.sellVols.length>28) state.sellVols.shift();
-    if(state.buyVols.length>28) state.buyVols.shift();
-  }
-
   return state;
-}
-
-let tradesTableRows = [];
-function pushTradeRow(t){
-  tradesTableRows.unshift(t);
-  if(tradesTableRows.length > 7) tradesTableRows.pop();
-}
-
-// One persistent MicroFish dot per closed trade — win stays green, loss
-// stays pink, and it keeps drifting (via driftNodes()) rather than being
-// recomputed from scratch on every render, unlike the candle/position
-// dots in drawMicrofish(). Capped so the panel doesn't accumulate an
-// unbounded number of dots over a long session.
-function pushTradeNode(win, pnl){
-  state.tradeNodes.push({
-    x: rnd(0.05,0.95), y: rnd(0.1,0.9),
-    r: Math.min(3 + Math.sqrt(Math.abs(pnl))*1.2, 13),
-    color: win ? '#28ffb0' : '#ff2e88',
-    vx: rnd(-0.0006,0.0006), vy: rnd(-0.0004,0.0004), pulse: rnd(0,Math.PI*2),
-  });
-  if(state.tradeNodes.length > 40) state.tradeNodes.shift();
-}
-
-const logMessages = [
-  'signal confirmed · arbitrage window',
-  'liquidity tag matched',
-  'still open · watching VM log',
-  'order sync complete',
-  'spread narrowed · reentry armed',
-  'cluster shift detected',
-  'confidence recalculated',
-];
-function pushLog(win, price, pnl){
-  const now = new Date();
-  const t = now.toTimeString().slice(0,8);
-  const tag = win ? 'WIN' : (Math.random()<0.5?'IN':'TICK');
-  const msg = choice(logMessages);
-  state.logs.push({t, tag, price, pnl, msg});
-  if(state.logs.length > 60) state.logs.shift();
 }
 
 // =========================================================
 // LIVE DATA (MetaApi / MT5)
 // =========================================================
-let liveInitialEquity = null;
-let liveKnownDealIds = new Set();
-
 function proxiedUrl(url){
   // MetaApi's trading REST API does not support direct browser CORS access.
   // If a Worker proxy URL is configured, route every call through it (server
@@ -561,81 +352,24 @@ async function metaApiFetch(url){
 }
 
 async function fetchLiveData(){
-  const base = `${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
-  const now = new Date();
-  const from = new Date(now.getTime() - 24*60*60*1000);
-
-  const [account, positions, deals] = await Promise.all([
-    metaApiFetch(`${base}/account-information`),
-    metaApiFetch(`${base}/positions`).catch(()=>[]),
-    metaApiFetch(`${base}/history-deals/time/${from.toISOString()}/${now.toISOString()}`).catch(()=>[]),
-  ]);
-
-  // candles are optional — a separate host, and can be slow/unsupported for some symbols
-  let candles = null;
-  try{
-    const cbase = `${MARKET_DATA_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
-    candles = await metaApiFetch(`${cbase}/historical-market-data/symbols/${CONFIG.SYMBOL}/timeframes/1m/candles?limit=26`);
-  }catch(e){ /* leave candles as-is if unavailable */ }
-
-  return {account, positions, deals, candles};
+  // No account/positions/deals fetching — this is a signal-only tool that
+  // never places orders, so there's nothing to track on the account side.
+  // Candles (for the displayed chart + current price) are the only live
+  // data this tool needs.
+  const cbase = `${MARKET_DATA_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}`;
+  const candles = await metaApiFetch(`${cbase}/historical-market-data/symbols/${CONFIG.SYMBOL}/timeframes/1m/candles?limit=26`);
+  return {candles};
 }
 
 function mapLiveDataToState(data){
-  const { account, positions, deals, candles } = data;
+  const { candles } = data;
 
-  if(liveInitialEquity === null) liveInitialEquity = account.equity;
-  state.equity = account.equity;
-  state.balance = account.balance;
-  state.positions = positions || [];
-  state.equityHistory.push(account.equity);
-  if(state.equityHistory.length > 200) state.equityHistory.shift();
-
-  // price: prefer an open position's current price, else last candle close
-  if(positions && positions.length){
-    state.price = positions[0].currentPrice;
-  } else if(candles && candles.length){
+  if(candles && candles.length){
     state.price = candles[candles.length-1].close;
+    state.candles = candles.slice(-26).map(c=>({open:c.open, high:c.high, low:c.low, close:c.close}));
   }
   state.priceHistory.push(state.price);
   if(state.priceHistory.length > 40) state.priceHistory.shift();
-
-  if(candles && candles.length){
-    state.candles = candles.slice(-26).map(c=>({open:c.open, high:c.high, low:c.low, close:c.close}));
-  }
-
-  // closed trades placed by this bot only (comment === 'gravia-auto', set
-  // in placeOrder()). Manually-placed trades on the same account are
-  // intentionally excluded from win rate / PnL / the trade log, since
-  // those stats are meant to reflect the automated strategies' own
-  // performance, not the account's overall activity.
-  const closed = (deals||[]).filter(d => (d.entryType === 'DEAL_ENTRY_OUT' || d.entryType === 'DEAL_ENTRY_OUT_BY') && typeof d.profit === 'number' && d.comment === 'gravia-auto');
-  closed.sort((a,b)=> new Date(a.time) - new Date(b.time));
-
-  state.trades = closed.length;
-  state.wins = closed.filter(d=>d.profit > 0).length;
-  state.pnl = closed.reduce((sum,d)=> sum + d.profit + (d.commission||0) + (d.swap||0), 0);
-
-  // streak = consecutive wins counting back from the most recent closed trade
-  let streak = 0;
-  for(let i=closed.length-1;i>=0;i--){
-    if(closed[i].profit > 0) streak++; else break;
-  }
-  state.streak = streak;
-  state.bestStreak = Math.max(state.bestStreak, streak);
-
-  // new trades only, for table + log + volume bars (avoid re-announcing old ones every poll)
-  const freshDeals = closed.filter(d => !liveKnownDealIds.has(d.id));
-  freshDeals.forEach(d=>{
-    liveKnownDealIds.add(d.id);
-    const winPct = state.trades ? (state.wins/state.trades*100) : 100;
-    const row = { price: d.price, winPct, pnl: d.profit };
-    pushTradeRow(row);
-    pushLog(d.profit > 0, d.price, d.profit);
-    pushTradeNode(d.profit > 0, d.profit);
-    if(d.type === 'DEAL_TYPE_SELL'){ state.sellVols.push(d.volume); if(state.sellVols.length>28) state.sellVols.shift(); }
-    else { state.buyVols.push(d.volume); if(state.buyVols.length>28) state.buyVols.shift(); }
-  });
 
   return state;
 }
@@ -644,7 +378,6 @@ async function liveTick(){
   try{
     const data = await fetchLiveData();
     mapLiveDataToState(data);
-    driftNodes(); // drifts the persistent per-trade MicroFish dots (state.tradeNodes) between renders
     renderAll();
   }catch(err){
     console.error('Gravia live data error:', err);
@@ -658,50 +391,23 @@ async function liveTick(){
 }
 
 // =========================================================
-// AUTOTRADE — EMA touch + pin bar strategy (reference implementation)
-// ---------------------------------------------------------
-// Does not guarantee profit. Test on a demo account before ever
-// considering a live account. Two independent switches must both be on
-// before any order is placed:
+// SIGNAL TOOL — multi-pattern chart-pattern detection (reference
+// implementation). This tool NEVER places orders — it only detects
+// patterns and alerts the user (sound + browser notification + on-screen
+// log/history) so they can decide whether to enter manually in their own
+// broker app. Requires two independent switches both on before any alert
+// fires:
 //   1) CONFIG.AUTOTRADE.ENABLED, set in config.js (never committed to git)
 //   2) the on-screen toggle, which always starts OFF on every page load
-// A third safety net (MAX_OPEN_POSITIONS) also blocks re-entry even if
-// signal de-duplication ever misfires.
 // =========================================================
 const AT = CONFIG.AUTOTRADE;
 const atState = {
   enabled: false,
-  openPositions: 0,
-  dailyLossHit: false,
   lastSignalText: '—',
   lastProcessed: {},
   polling: false,
   lastStatusLogAt: 0,
-  // Display-only offset for the on-screen PnL figures (see displayPnl()
-  // below). Purely cosmetic — subtracted only when rendering, never from
-  // state.pnl itself, so the MAX_DAILY_LOSS circuit breaker in
-  // autotradeTick() keeps checking the real, unadjusted realized PnL.
-  pnlDisplayBaseline: 0,
 };
-try{
-  const savedBaseline = Number(localStorage.getItem('gravia_pnl_display_baseline'));
-  if(Number.isFinite(savedBaseline)) atState.pnlDisplayBaseline = savedBaseline;
-}catch(e){ /* localStorage unavailable — ignore */ }
-
-// The on-screen PnL figures show this instead of the raw state.pnl, so a
-// "reset display" click can zero out what the user sees without touching
-// the real account history state.pnl is computed from (mapLiveDataToState())
-// or the safety-critical MAX_DAILY_LOSS check in autotradeTick(), which both
-// keep using state.pnl directly.
-function displayPnl(){
-  return state.pnl - atState.pnlDisplayBaseline;
-}
-function resetPnlDisplay(){
-  atState.pnlDisplayBaseline = state.pnl;
-  try{ localStorage.setItem('gravia_pnl_display_baseline', String(atState.pnlDisplayBaseline)); }catch(e){ /* ignore */ }
-  renderAll();
-  updateAutotradeUI();
-}
 // シグナル未検出でも「動いていることが分かる」よう、この間隔で現在値と
 // EMAの位置関係を実行ログへ一言出す(スパム防止のため間引く)。
 const STATUS_LOG_INTERVAL_MS = 5*60*1000;
@@ -1986,92 +1692,6 @@ function backtestPatternL(higherCandles, lowerCandles){
   return results;
 }
 
-// ---------------------------------------------------------
-// Risk-based lot sizing (opt-in via AT.RISK_PER_TRADE).
-//
-// Without this, every pattern uses the same fixed AT.LOT_SIZE regardless
-// of how wide its SL happens to be — and SL width varies enormously by
-// pattern, because several patterns derive TP/SL from a fixed BAR COUNT
-// (AT.LOOKBACK_BARS) on very different timeframes (1m for I/K's lower
-// leg vs 15m for most vs 1h/4h for L/D/F). 20 bars on a 1-minute chart is
-// ~20 minutes of range; 20 bars on a 4-hour chart is over 3 days — so the
-// same fixed lot size represents wildly different real money risk
-// depending on which pattern happens to fire. Opting into RISK_PER_TRADE
-// normalizes that: lot size is computed per signal so each trade risks
-// roughly the same account-currency amount if its SL is hit, regardless
-// of which pattern/timeframe produced it.
-//
-// IMPORTANT CAVEAT: this assumes the account's currency matches the
-// traded symbol's quote currency (e.g. a JPY account trading USDJPY, or
-// a USD account trading a USDxxx/xxxUSD pair) — this tool does no
-// currency-conversion of its own. If that assumption doesn't hold for
-// your account/symbol, the computed lot size will be wrong; leave
-// RISK_PER_TRADE unset (the default) to keep using the fixed AT.LOT_SIZE
-// instead.
-let symbolSpecCache = {};
-async function fetchSymbolSpecification(symbol){
-  if(symbolSpecCache[symbol]) return symbolSpecCache[symbol];
-  const spec = await metaApiFetch(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/symbols/${symbol}/specification`);
-  symbolSpecCache[symbol] = spec;
-  return spec;
-}
-
-// Computes a lot size sized so that a loss at `slPrice` costs roughly
-// AT.RISK_PER_TRADE (account currency, see caveat above). Returns null if
-// the inputs aren't usable (caller should fall back to AT.LOT_SIZE).
-function computeRiskBasedLotSize(entryPrice, slPrice, contractSize){
-  if(!(AT.RISK_PER_TRADE > 0)) return null;
-  const priceDistance = Math.abs(entryPrice - slPrice);
-  if(!(priceDistance > 0) || !(contractSize > 0)) return null;
-  const riskPerLot = priceDistance * contractSize;
-  if(!(riskPerLot > 0)) return null;
-  let lot = AT.RISK_PER_TRADE / riskPerLot;
-  // Safety clamp: never let a bad specification fetch or an extreme SL
-  // distance size a position wildly outside the configured base lot.
-  const minLot = 0.01;
-  const maxLot = AT.LOT_SIZE * 10;
-  lot = Math.max(minLot, Math.min(maxLot, lot));
-  return Math.round(lot * 100) / 100; // 0.01 lot step
-}
-
-async function placeOrder(direction, tp, sl, lotSize){
-  const body = {
-    actionType: direction==='long' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL',
-    symbol: AT.SYMBOL,
-    volume: lotSize || AT.LOT_SIZE,
-    takeProfit: tp,
-    stopLoss: sl,
-    comment: 'gravia-auto',
-  };
-  const fetchUrl = proxiedUrl(`${API_BASE}/users/current/accounts/${CONFIG.METAAPI_ACCOUNT_ID}/trade`);
-  let res;
-  try{
-    res = await fetch(fetchUrl, {
-      method: 'POST',
-      headers: { 'auth-token': CONFIG.METAAPI_TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  }catch(networkErr){
-    throw new Error(`network error calling ${fetchUrl} — ${networkErr.name}: ${networkErr.message}`);
-  }
-  const text = await res.text();
-  let data;
-  try{ data = JSON.parse(text); }catch(e){ data = { raw: text.slice(0,200) }; }
-  if(!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data).slice(0,200)}`);
-
-  // MetaApi's /trade endpoint can return HTTP 200 even when the broker
-  // actually rejected the trade (invalid stops, insufficient margin,
-  // market closed, requote, etc.) — the real outcome is in the response
-  // body's numericCode (an MT4/5 trade return code). Without this check,
-  // a rejected trade would be logged as a false "発注成功" with no
-  // position ever actually opening.
-  const TRADE_SUCCESS_CODES = [10008, 10009]; // TRADE_RETCODE_PLACED, TRADE_RETCODE_DONE
-  if(typeof data.numericCode === 'number' && !TRADE_SUCCESS_CODES.includes(data.numericCode)){
-    throw new Error(`取引拒否 (${data.numericCode} ${data.stringCode||''}): ${data.message || JSON.stringify(data).slice(0,200)}`);
-  }
-  return data;
-}
-
 function atLog(tag, msg){
   // Pushed into the same state.logs buffer that renderLogs() renders from
   // (rather than writing directly to the DOM), so this entry survives the
@@ -2084,12 +1704,103 @@ function atLog(tag, msg){
 }
 
 function updateAutotradeUI(){
-  const pnlEl = document.getElementById('atDailyPnl');
-  pnlEl.textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
-  pnlEl.style.color = displayPnl()>=0 ? 'var(--green)' : 'var(--pink)';
-  document.getElementById('atOpenPositions').textContent = `${atState.openPositions} / ${AT.MAX_OPEN_POSITIONS}`;
   document.getElementById('atLastSignal').textContent = atState.lastSignalText;
   document.getElementById('atToggleState').textContent = atState.enabled ? 'ON' : 'OFF';
+}
+
+// =========================================================
+// ALERT DISPATCH — this tool never places orders; when a pattern's signal
+// clears the same quality gates the old order-placement path used to
+// (stale-price check, reward:risk filter), it fires an alert through all
+// three channels instead: a short beep, a browser notification (best
+// effort — see README for iOS Safari's limitations), and a persistent
+// row in the on-screen signal history table.
+// =========================================================
+let alertAudioCtx = null;
+
+// Short two-tone beep via the Web Audio API — no external sound file to
+// host/load, so this works the same whether self-hosted or on GitHub Pages.
+function playAlertSound(){
+  try{
+    if(!alertAudioCtx) alertAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = alertAudioCtx;
+    const now = ctx.currentTime;
+    [880, 1320].forEach((freq, i)=>{
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = now + i*0.14;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.25, start+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start+0.13);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start+0.14);
+    });
+  }catch(e){ /* Web Audio unavailable (e.g. no user gesture yet) — ignore, other alert channels still fire */ }
+}
+
+// Browser Notification API — best effort only. Requires the user to have
+// clicked "通知を許可" first (browsers refuse permission requests without a
+// user gesture), and even when granted, delivery while the tab/app is fully
+// backgrounded is unreliable on iOS Safari unless the page has been added
+// to the Home Screen. See README for details.
+function sendBrowserNotification(title, body){
+  try{
+    if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    new Notification(title, { body, tag: 'gravia-signal' });
+  }catch(e){ /* ignore — sound/on-screen alerts still fire regardless */ }
+}
+
+function pushSignalHistory(signal){
+  state.signalHistory.unshift({
+    patternKey: signal.patternKey,
+    direction: signal.direction,
+    price: state.price,
+    tp: signal.tp,
+    sl: signal.sl,
+    time: new Date().toTimeString().slice(0,8),
+  });
+  if(state.signalHistory.length > 30) state.signalHistory.pop();
+}
+
+function fireSignalAlert(signal, label){
+  pushSignalHistory(signal);
+  playAlertSound();
+  sendBrowserNotification(
+    `GRAVIA サイン: ${label}`,
+    `${AT.SYMBOL} 現在値 ${fmt(state.price,3)} / TP ${fmt(signal.tp,3)} / SL ${fmt(signal.sl,3)}`
+  );
+  atLog('ALERT', `${label}: サインを通知しました(TP ${fmt(signal.tp,3)} / SL ${fmt(signal.sl,3)})。`);
+  renderSignalHistory();
+}
+
+function initNotifyButton(){
+  const btn = document.getElementById('atNotifyBtn');
+  if(!btn) return;
+  const refresh = ()=>{
+    if(typeof Notification === 'undefined'){
+      btn.textContent = '🔕 このブラウザは通知非対応';
+      btn.disabled = true;
+    } else if(Notification.permission === 'granted'){
+      btn.textContent = '🔔 通知は許可済み';
+      btn.disabled = true;
+    } else if(Notification.permission === 'denied'){
+      btn.textContent = '🔕 通知がブロックされています(ブラウザ設定から許可してください)';
+      btn.disabled = true;
+    } else {
+      btn.textContent = '🔔 通知を許可';
+      btn.disabled = false;
+    }
+  };
+  btn.addEventListener('click', async ()=>{
+    try{
+      await Notification.requestPermission();
+    }catch(e){ /* ignore */ }
+    refresh();
+  });
+  refresh();
 }
 
 // Registry of every autotrade pattern. Each entry declares the timeframe(s)
@@ -2211,20 +1922,6 @@ async function autotradeTick(){
   try{
     if(!LIVE_MODE || !AT.ENABLED){ updateAutotradeUI(); return; }
 
-    atState.openPositions = (state.positions || []).length;
-
-    // Daily loss circuit breaker, using the same ~24h realized PnL already
-    // tracked in state.pnl from history-deals.
-    if(state.pnl <= -Math.abs(AT.MAX_DAILY_LOSS)){
-      if(!atState.dailyLossHit){
-        atState.dailyLossHit = true;
-        atLog('ERR', `本日の最大損失(${fmtMoney(-Math.abs(AT.MAX_DAILY_LOSS))})に達したため、新規発注を停止しました。`);
-      }
-      updateAutotradeUI();
-      return;
-    }
-    atState.dailyLossHit = false;
-
     const defs = patternDefs();
     const limitByTf = {};
     for(const d of defs){
@@ -2276,36 +1973,32 @@ async function autotradeTick(){
       atState.lastProcessed[dedupKey] = signal.signalId;
 
       const label = `パターン${signal.patternKey} ${signal.direction==='long'?'LONG':'SHORT'}`;
-      atLog('SIG', `${label} シグナル検出(参考) TP ${fmt(signal.tp,3)} / SL ${fmt(signal.sl,3)}`);
-      atState.lastSignalText = `${label} 検出`;
+      atLog('SIG', `${label} シグナル検出 TP ${fmt(signal.tp,3)} / SL ${fmt(signal.sl,3)}`);
+      atState.lastSignalText = `${label} TP ${fmt(signal.tp,3)} / SL ${fmt(signal.sl,3)}`;
 
       if(!atState.enabled){
-        atLog('SIG', '自動売買トグルがOFFのため発注しません。');
-        continue;
-      }
-      if(atState.openPositions >= AT.MAX_OPEN_POSITIONS){
-        atLog('SIG', `保有ポジション上限(${AT.MAX_OPEN_POSITIONS})に達しているため発注しません。`);
+        atLog('SIG', 'シグナル監視トグルがOFFのためサインを通知しません。');
         continue;
       }
 
       // signal.tp/signal.sl were computed from a closed candle, which can
-      // already be stale by the time we actually submit the order —
+      // already be stale by the time the user actually sees this alert —
       // especially right after a sharp reversal (patternG enters exactly
       // at that moment: right as price snaps back from piercing a band).
       // If the freshest known price has already moved past the target or
-      // stop, the broker will reject this as invalid stops anyway; catching
-      // it here first gives a clearer, pattern-specific log instead of a
-      // generic broker error. Only checked when the chart's displayed
-      // symbol matches the autotrade symbol — otherwise state.price would
-      // be a different instrument's price and this check would be
-      // comparing apples to oranges, so it's skipped (order still
-      // attempted normally, same as before this check existed).
+      // stop, acting on this alert no longer makes sense; catching it here
+      // first avoids alerting about a setup that's already invalid. Only
+      // checked when the chart's displayed symbol matches the signal-scan
+      // symbol — otherwise state.price would be a different instrument's
+      // price and this check would be comparing apples to oranges, so it's
+      // skipped (alert still fires normally, same as before this check
+      // existed).
       if(CONFIG.SYMBOL === AT.SYMBOL && typeof state.price === 'number'){
         const stale = signal.direction === 'long'
           ? (state.price >= signal.tp || state.price <= signal.sl)
           : (state.price <= signal.tp || state.price >= signal.sl);
         if(stale){
-          atLog('SIG', `${label}: 現在値(${fmt(state.price,3)})が既にTP/SLを通過しているため見送ります(シグナル検出時から値動きがありました)。`);
+          atLog('SIG', `${label}: 現在値(${fmt(state.price,3)})が既にTP/SLを通過しているためサインを見送ります(シグナル検出時から値動きがありました)。`);
           continue;
         }
 
@@ -2314,43 +2007,20 @@ async function autotradeTick(){
         // enforced between the two, so a signal can legitimately have a
         // narrower reward than its risk (a structurally "small win, big
         // loss" trade even before considering win rate). Requiring
-        // reward >= risk rejects those up front instead of taking them.
-        // Same CONFIG.SYMBOL===AT.SYMBOL guard as the staleness check
-        // above, since this also needs state.price as the entry-price
-        // stand-in to split the TP/SL span into a reward and risk side.
+        // reward >= risk rejects those up front instead of alerting about
+        // them. Same CONFIG.SYMBOL===AT.SYMBOL guard as the staleness
+        // check above, since this also needs state.price as the
+        // entry-price stand-in to split the TP/SL span into a reward and
+        // risk side.
         const reward = signal.direction === 'long' ? signal.tp - state.price : state.price - signal.tp;
         const risk = signal.direction === 'long' ? state.price - signal.sl : signal.sl - state.price;
         if(reward < risk){
-          atLog('SIG', `${label}: 利確までの値幅(${fmt(reward,3)})が損切りまでの値幅(${fmt(risk,3)})より狭いため見送ります。`);
+          atLog('SIG', `${label}: 利確までの値幅(${fmt(reward,3)})が損切りまでの値幅(${fmt(risk,3)})より狭いためサインを見送ります。`);
           continue;
         }
       }
 
-      let lotSize = AT.LOT_SIZE;
-      if(AT.RISK_PER_TRADE > 0){
-        try{
-          const spec = await fetchSymbolSpecification(AT.SYMBOL);
-          const riskLot = computeRiskBasedLotSize(state.price, signal.sl, spec && spec.contractSize);
-          if(riskLot){
-            lotSize = riskLot;
-          } else {
-            atLog('SIG', `${label}: リスクベースのロット計算に失敗したため、既定ロット${AT.LOT_SIZE}を使用します。`);
-          }
-        }catch(specErr){
-          atLog('SIG', `${label}: 銘柄仕様の取得に失敗したため、既定ロット${AT.LOT_SIZE}を使用します(${specErr.message})。`);
-        }
-      }
-
-      try{
-        const result = await placeOrder(signal.direction, signal.tp, signal.sl, lotSize);
-        atLog('ORD', `発注成功: ${label} ロット${lotSize} ${JSON.stringify(result).slice(0,120)}`);
-        // Reflect immediately so a second signal later in this same loop
-        // still respects the position cap, rather than only checking the
-        // stale pre-tick count.
-        atState.openPositions++;
-      }catch(err){
-        atLog('ERR', `発注失敗: ${label} — ${err.message}`);
-      }
+      fireSignalAlert(signal, label);
     }
     updateAutotradeUI();
   }catch(err){
@@ -2390,8 +2060,6 @@ function updateSymbolLabels(){
   if(brand) brand.textContent = `· ${CONFIG.SYMBOL}`;
   const chartLabel = document.getElementById('chartSymbolLabel');
   if(chartLabel) chartLabel.textContent = `${CONFIG.SYMBOL} · CHART`;
-  const mfLabel = document.getElementById('microfishSymbolLabel');
-  if(mfLabel) mfLabel.textContent = `MICROFISH · ${CONFIG.SYMBOL}`;
 }
 
 function switchSymbol(sym){
@@ -2423,10 +2091,9 @@ function renderAutotradeNote(){
     badge.textContent = '接続中';
     badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)'; badge.style.borderColor = 'var(--green)';
     const tfSummary = patternDefs().map(p=>`${p.key}:${formatPatternTimeframes(p)}`).join(' ');
-    const lotText = AT.RISK_PER_TRADE > 0 ? `1トレードあたりのリスク${fmtMoney(AT.RISK_PER_TRADE)}(SL幅に応じてロット自動調整)` : `ロット${AT.LOT_SIZE}`;
-    note.textContent = `対象: ${AT.SYMBOL} / 各パターンの時間足(${tfSummary}) / ${lotText} / 同時保有上限${AT.MAX_OPEN_POSITIONS} / 日次損失上限${fmtMoney(AT.MAX_DAILY_LOSS)}。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
+    note.textContent = `対象: ${AT.SYMBOL} / 各パターンの時間足(${tfSummary}) / 通知: 音・ブラウザ通知(許可時)・画面表示。発注は一切行いません。安全のため、このトグルはページを開き直すたびにOFFへ戻ります。`;
   } else if(!LIVE_MODE){
-    note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。自動売買はLIVE接続時のみ有効です。';
+    note.textContent = 'MetaApiに接続されていません(シミュレーションモード)。サイン検知はLIVE接続時のみ有効です。';
   } else {
     note.textContent = 'AUTOTRADE.ENABLEDがfalseのため無効化されています。有効にするには設定(config.js、またはホスト先WorkerのAUTOTRADE_ENABLED変数)を編集してください。';
   }
@@ -2439,12 +2106,13 @@ function initAutotradeUI(){
   renderAutotradeNote();
   toggle.addEventListener('change', (e)=>{
     atState.enabled = e.target.checked;
-    atLog('SIG', `自動売買を${atState.enabled?'ON':'OFF'}にしました。`);
+    atLog('SIG', `シグナル監視を${atState.enabled?'ON':'OFF'}にしました。`);
     updateAutotradeUI();
   });
 
-  // Backtest button only needs a live MetaApi connection (not AT.ENABLED) —
-  // checking past signal frequency is useful even before arming autotrade.
+  // Backtest buttons only need a live MetaApi connection (not AT.ENABLED) —
+  // checking past signal frequency/expectancy is useful even before
+  // turning on signal monitoring.
   const backtestBtn = document.getElementById('atBacktestBtn');
   backtestBtn.disabled = !LIVE_MODE;
   backtestBtn.addEventListener('click', runBacktest);
@@ -2453,11 +2121,7 @@ function initAutotradeUI(){
   pnlBacktestBtn.disabled = !LIVE_MODE;
   pnlBacktestBtn.addEventListener('click', runPnlBacktest);
 
-  document.getElementById('atPnlResetBtn').addEventListener('click', ()=>{
-    resetPnlDisplay();
-    atLog('SIG', '本日の損益表示をリセットしました(実際の口座履歴・日次損失上限の判定には影響しません)。');
-  });
-
+  initNotifyButton();
   updateAutotradeUI();
 }
 
@@ -2623,68 +2287,6 @@ async function runBacktest(){
   }
 }
 
-// ---------- MicroFish nodes ----------
-// Three kinds of dots, all tied to real data (see the redesign note in
-// drawMicrofish()): recent candles and open positions are recomputed
-// fresh every render (their "position" IS the current data), while
-// state.tradeNodes (one persistent dot per closed trade, added by
-// pushTradeNode()) keeps drifting between renders like the original
-// purely-decorative version did.
-function initNodes(){
-  state.nodes = [];
-  state.tradeNodes = [];
-}
-
-function driftNodes(){
-  state.tradeNodes.forEach(n=>{
-    n.x += n.vx; n.y += n.vy; n.pulse += 0.05;
-    if(n.x<0.02||n.x>0.98) n.vx *= -1;
-    if(n.y<0.05||n.y>0.95) n.vy *= -1;
-  });
-}
-
-// Recent candles (up to 26) plotted like a miniature price chart: x by
-// index, y by where the close sits within the visible high/low range
-// (so it echoes the real candlestick panel's shape), color by candle
-// direction, size by that candle's range relative to the average.
-function computeCandleNodes(){
-  const candles = state.candles || [];
-  if(candles.length === 0) return [];
-  const rangeMax = Math.max(...candles.map(c=>c.high));
-  const rangeMin = Math.min(...candles.map(c=>c.low));
-  const span = Math.max(rangeMax-rangeMin, 1e-9);
-  const avgRange = candles.reduce((s,c)=>s+(c.high-c.low),0)/candles.length || 1;
-  return candles.map((c,i)=>{
-    const bull = c.close >= c.open;
-    const yNorm = 1 - ((c.close-rangeMin)/span);
-    return {
-      x: candles.length>1 ? 0.06 + (i/(candles.length-1))*0.88 : 0.5,
-      y: 0.1 + yNorm*0.8,
-      r: Math.min(2 + ((c.high-c.low)/avgRange)*3, 9),
-      color: bull ? '#28ffb0' : '#ff2e88',
-      pulse: i*0.7,
-    };
-  });
-}
-
-// Currently open positions as larger, brighter dots — green while
-// floating in profit, pink while floating at a loss. Empty outside LIVE
-// mode (simulation never opens real positions).
-function computePositionNodes(){
-  const positions = state.positions || [];
-  if(positions.length === 0) return [];
-  return positions.map((p,i)=>{
-    const profit = typeof p.profit === 'number' ? p.profit : 0;
-    return {
-      x: positions.length>1 ? 0.15 + (i/(positions.length-1))*0.7 : 0.5,
-      y: 0.5,
-      r: Math.min(10 + Math.sqrt(Math.abs(profit))*1.5, 20),
-      color: profit >= 0 ? '#28ffb0' : '#ff2e88',
-      pulse: i*1.3,
-    };
-  });
-}
-
 // =========================================================
 // RENDERING
 // =========================================================
@@ -2697,26 +2299,6 @@ function hidpiCanvas(cv){
   const ctx = cv.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
   return {ctx, w:rect.width, h:rect.height};
-}
-
-function drawSpark(cv, data, color){
-  const c = hidpiCanvas(cv); if(!c) return;
-  const {ctx,w,h} = c;
-  ctx.clearRect(0,0,w,h);
-  if(data.length<2) return;
-  const min = Math.min(...data), max = Math.max(...data);
-  const range = (max-min)||1;
-  ctx.beginPath();
-  data.forEach((v,i)=>{
-    const x = i/(data.length-1)*w;
-    const y = h - ((v-min)/range)*h*0.85 - h*0.05;
-    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  });
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
-  const grad = ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0, color+'55'); grad.addColorStop(1, color+'00');
-  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
 }
 
 function drawCandles(){
@@ -2754,101 +2336,6 @@ function drawCandles(){
   }
 }
 
-function drawStreakBar(){
-  const cv = document.getElementById('streakbar');
-  const c = hidpiCanvas(cv); if(!c) return;
-  const {ctx,w,h} = c;
-  ctx.clearRect(0,0,w,h);
-  const n = 20;
-  const bw = w/n;
-  for(let i=0;i<n;i++){
-    const win = Math.random() < 0.82;
-    const bh = rnd(h*0.2, h*0.95);
-    ctx.fillStyle = win ? '#28ffb0aa' : '#ff2e88aa';
-    ctx.fillRect(i*bw+1, h-bh, bw-2, bh);
-  }
-}
-
-// MicroFish is a real-data visualization, not decoration: dots for the
-// visible candles (mini price-shape echo), currently open positions
-// (bright, floating profit/loss), and every closed trade this bot has
-// placed (persistent, from state.tradeNodes) — win stays green, loss
-// stays pink. Connecting lines between nearby dots are still purely
-// cosmetic (no meaning to the distance itself).
-function drawMicrofish(){
-  const cv = document.getElementById('microfish');
-  const c = hidpiCanvas(cv); if(!c) return;
-  const {ctx,w,h} = c;
-  ctx.clearRect(0,0,w,h);
-  const pts = [...computeCandleNodes(), ...computePositionNodes(), ...state.tradeNodes];
-  ctx.lineWidth = 0.5;
-  let linkCount = 0;
-  for(let i=0;i<pts.length;i++){
-    for(let j=i+1;j<pts.length;j++){
-      const a=pts[i], b=pts[j];
-      const dx=(a.x-b.x)*w, dy=(a.y-b.y)*h;
-      const d = Math.sqrt(dx*dx+dy*dy);
-      if(d < 55){
-        linkCount++;
-        ctx.strokeStyle = 'rgba(150,160,200,'+(0.08*(1-d/55))+')';
-        ctx.beginPath(); ctx.moveTo(a.x*w,a.y*h); ctx.lineTo(b.x*w,b.y*h); ctx.stroke();
-      }
-    }
-  }
-  pts.forEach(n=>{
-    const glow = 0.6 + Math.sin(n.pulse)*0.3;
-    ctx.beginPath();
-    ctx.fillStyle = n.color;
-    ctx.globalAlpha = glow;
-    ctx.arc(n.x*w, n.y*h, n.r, 0, Math.PI*2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  });
-
-  // mf-stats: real counts instead of the old static placeholder numbers.
-  document.getElementById('mfNodes').textContent = `${pts.length} NODES`;
-  document.getElementById('mfLinks').textContent = `${linkCount} LINKS`;
-  const winPct = state.trades ? (state.wins/state.trades*100) : 100;
-  document.getElementById('mfConf').textContent = `${fmt(winPct,1)}%`;
-}
-
-function drawEquityCurve(){
-  const cv = document.getElementById('equitycurve');
-  const c = hidpiCanvas(cv); if(!c) return;
-  const {ctx,w,h} = c;
-  ctx.clearRect(0,0,w,h);
-  const data = state.equityHistory;
-  if(data.length<2) return;
-  const min = Math.min(...data), max = Math.max(...data);
-  const range = (max-min)||1;
-  ctx.beginPath();
-  data.forEach((v,i)=>{
-    const x = i/(data.length-1)*w;
-    const y = h - ((v-min)/range)*h*0.88 - h*0.04;
-    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  });
-  ctx.strokeStyle = '#28ffb0'; ctx.lineWidth = 1.8; ctx.stroke();
-  const grad = ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0,'#28ffb040'); grad.addColorStop(1,'#28ffb000');
-  ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
-}
-
-function drawVolBars(id, data, color){
-  const cv = document.getElementById(id);
-  const c = hidpiCanvas(cv); if(!c) return;
-  const {ctx,w,h} = c;
-  ctx.clearRect(0,0,w,h);
-  if(data.length===0) return;
-  const max = Math.max(...data,1);
-  const bw = w/data.length;
-  data.forEach((v,i)=>{
-    const bh = (v/max)*h*0.9;
-    ctx.fillStyle = color;
-    ctx.fillRect(i*bw+1, h-bh, bw-2, bh);
-  });
-}
-
 function renderLogs(){
   const el = document.getElementById('logBody');
   el.innerHTML = state.logs.slice(-40).map(l=>{
@@ -2859,81 +2346,46 @@ function renderLogs(){
   el.scrollTop = el.scrollHeight;
 }
 
-function renderTrades(){
-  const body = document.getElementById('tradesBody');
-  body.innerHTML = tradesTableRows.map(t=>{
+function renderSignalHistory(){
+  const body = document.getElementById('signalsBody');
+  body.innerHTML = state.signalHistory.map(s=>{
+    const dirLabel = s.direction === 'long' ? 'LONG' : 'SHORT';
+    const dirClass = s.direction === 'long' ? 'up' : 'dn';
     return `<tr>
-      <td>${CONFIG.CURRENCY_SYMBOL}${fmt(t.price,2)}</td>
-      <td class="${t.winPct>=50?'up':'dn'}">${fmt(t.winPct,1)}%</td>
-      <td class="${t.pnl>=0?'up':'dn'}">${t.pnl>=0?'+':''}${fmt(t.pnl,2)}</td>
+      <td>${s.patternKey}</td>
+      <td class="${dirClass}">${dirLabel}</td>
+      <td>${CONFIG.CURRENCY_SYMBOL}${fmt(s.price,2)}</td>
+      <td>${CONFIG.CURRENCY_SYMBOL}${fmt(s.tp,2)}</td>
+      <td>${CONFIG.CURRENCY_SYMBOL}${fmt(s.sl,2)}</td>
     </tr>`;
   }).join('');
 }
 
 function renderHeaderAndCards(){
   document.getElementById('hPrice').textContent = CONFIG.CURRENCY_SYMBOL+fmt(state.price,2);
-  document.getElementById('hPnl').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
-  document.getElementById('hTrades').textContent = state.trades+'/'+state.totalTrades;
-  const winPct = state.trades? (state.wins/state.trades*100):100;
-  document.getElementById('hWin').textContent = fmt(winPct,1)+'%';
   document.getElementById('hTime').textContent = new Date().toTimeString().slice(0,8);
-
-  document.getElementById('eqVal').textContent = fmtMoney(state.equity);
-  // In LIVE_MODE, growth is measured against this session's first observed
-  // equity (liveInitialEquity), not the decorative 1.52 simulation-mode
-  // starting balance — using that fixed constant against a real account's
-  // equity (thousands of dollars) previously produced a meaningless
-  // multi-million-percent figure.
-  const growthBase = LIVE_MODE ? (liveInitialEquity || state.equity) : 1.52;
-  const growth = growthBase ? ((state.equity-growthBase)/growthBase*100) : 0;
-  const growthSign = growth >= 0 ? '▲' : '▼';
-  document.getElementById('eqDelta').textContent = growthSign+' '+fmt(Math.abs(growth),1)+'% · '+state.trades+' trades';
-  document.getElementById('eqTrades').textContent = state.trades;
-  document.getElementById('eqWin').textContent = fmt(winPct,1)+'%';
-  document.getElementById('eqAvg').textContent = fmtMoney(state.trades? state.pnl/state.trades : 0);
 
   document.getElementById('cPrice').textContent = CONFIG.CURRENCY_SYMBOL+fmt(state.price,2);
   document.getElementById('book').innerHTML = state.candles.slice(-4).reverse().map(c=>{
     return `${fmt(c.close,2)} <b>${(c.close-c.open>=0?'▲':'▼')}</b>`;
   }).join('<br>');
-
-  document.getElementById('streakN').textContent = '+'+state.streak;
-  document.getElementById('streakBest').textContent = state.bestStreak;
-  document.getElementById('streakGain').textContent = '+'+fmt(growth,0)+'%';
-  document.getElementById('streakDur').textContent = new Date().toTimeString().slice(0,5);
-
-  document.getElementById('mfPnl').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
-
-  document.getElementById('curveVal').textContent = (displayPnl()>=0?'+':'')+fmtMoney(displayPnl());
-  document.getElementById('curveT').textContent = state.trades;
-  document.getElementById('curveW').textContent = fmt(winPct,1)+'%';
-
-  if(state.sellVols.length) document.getElementById('volPinkLabel').textContent = fmt(state.sellVols.reduce((a,b)=>a+b,0),0);
-  if(state.buyVols.length) document.getElementById('volGreenLabel').textContent = fmt(state.buyVols.reduce((a,b)=>a+b,0),0);
 }
 
 function renderAll(){
   renderHeaderAndCards();
-  drawSpark(document.getElementById('eqSpark'), state.equityHistory.slice(-30), '#ff2e88');
   drawCandles();
-  drawStreakBar();
-  drawMicrofish();
-  drawEquityCurve();
-  drawVolBars('volPink', state.sellVols, '#ff2e88aa');
-  drawVolBars('volGreen', state.buyVols, '#28ffb0aa');
-  renderTrades();
+  renderSignalHistory();
   renderLogs();
 }
 
 // ---------- Main loop ----------
-initNodes();
 initAutotradeUI();
 initSymbolSwitcher();
 
 if(LIVE_MODE){
   document.querySelectorAll('.sub').forEach(el=> el.innerHTML = '<span class="live-dot"></span>LIVE · MT5');
   updateSymbolLabels();
-  document.querySelector('.footer-note').textContent = 'GRAVIA DASHBOARD — MetaApi 経由の実データ(口座: ' + CONFIG.METAAPI_ACCOUNT_ID.slice(0,8) + '…)';
+  document.querySelector('.footer-note').textContent = 'GRAVIA SIGNAL TOOL — MetaApi 経由の実データ(口座: ' + CONFIG.METAAPI_ACCOUNT_ID.slice(0,8) + '…)。発注は一切行いません。';
   liveTick();
   setInterval(liveTick, CONFIG.POLL_MS);
   if(AT.ENABLED){
@@ -2944,7 +2396,6 @@ if(LIVE_MODE){
   for(let i=0;i<26;i++) simulateTick(); // seed initial data so it doesn't start empty
   function tick(){
     simulateTick();
-    driftNodes();
     renderAll();
   }
   tick();

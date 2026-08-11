@@ -230,9 +230,11 @@
     <div class="at-stat"><span class="k">保有ポジション</span><span class="v" id="atOpenPositions">0 / 1</span></div>
     <div class="at-stat"><span class="k">直近判定</span><span class="v" id="atLastSignal">—</span></div>
     <button class="at-btn" id="atBacktestBtn" disabled>過去のシグナル頻度を確認</button>
+    <button class="at-btn" id="atPnlBacktestBtn" disabled title="各シグナルのTP/SLが過去データ上で実際にどちらへ到達したかを検証します(参考値)">勝率・期待値を検証(参考値)</button>
   </div>
   <div class="at-note" id="atNote">MetaApiに接続され、config.jsで AUTOTRADE.ENABLED が true の場合のみ有効化されます。デモ口座での動作確認を強く推奨します。</div>
   <div class="at-backtest-result" id="atBacktestResult"></div>
+  <div class="at-backtest-result" id="atPnlBacktestResult"></div>
 </div>
 
 <div class="grid-row1">
@@ -803,7 +805,13 @@ function backtestSignals(candles, period, patternKey){
       continue;
     }
 
-    results.push({ direction, patternKey, time: candles[touchIdx].time, index: touchIdx });
+    // Same TP/SL formula as detectSignal()'s live path, so the P&L backtest
+    // (runPnlBacktest()) can simulate the same trade this pattern would
+    // actually place.
+    const lookback = candles.slice(Math.max(0, touchIdx-AT.LOOKBACK_BARS), touchIdx+1);
+    const tp = direction==='long' ? Math.max(...lookback.map(c=>c.high)) : Math.min(...lookback.map(c=>c.low));
+    const sl = direction==='long' ? Math.min(...lookback.map(c=>c.low)) : Math.max(...lookback.map(c=>c.high));
+    results.push({ direction, patternKey, time: candles[touchIdx].time, index: touchIdx, tp, sl });
     from = touchIdx + 1;
   }
   return results;
@@ -956,7 +964,12 @@ function backtestICTSignals(candles, patternKey){
       }
       if(touchIdx === -1){ from = sweepIdx+1; continue; }
 
-      results.push({ direction, patternKey, time: candles[touchIdx].time, index: touchIdx });
+      // Same TP/SL formula as detectICTSignal()'s live path, so the P&L
+      // backtest (runPnlBacktest()) can simulate the same trade.
+      const lookback = candles.slice(Math.max(0, touchIdx-AT.LOOKBACK_BARS), touchIdx+1);
+      const tp = direction==='long' ? Math.max(...lookback.map(x=>x.high)) : Math.min(...lookback.map(x=>x.low));
+      const sl = direction==='long' ? candles[sweepIdx].low : candles[sweepIdx].high;
+      results.push({ direction, patternKey, time: candles[touchIdx].time, index: touchIdx, tp, sl });
       from = touchIdx + 1;
     }
   }
@@ -1106,7 +1119,7 @@ function backtestTrendPullbackSignals(candles, direction, patternKey, emaPeriod)
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = trendPullbackOrChannelSignal(candles.slice(0, i+1), direction, patternKey, emaPeriod);
-    if(sig) results.push({ direction, patternKey, time: candles[i].time, index: i });
+    if(sig) results.push({ direction, patternKey, time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1193,7 +1206,7 @@ function backtestPatternE(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternE(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'E', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'E', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1245,7 +1258,7 @@ function backtestPatternG(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternG(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'G', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'G', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1322,7 +1335,7 @@ function backtestPatternH(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternH(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'H', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'H', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1398,7 +1411,7 @@ function backtestPatternM(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternM(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'M', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'M', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1503,7 +1516,7 @@ function backtestPatternN(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternN(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'N', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'N', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1589,7 +1602,7 @@ function backtestPatternO(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternO(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'O', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'O', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1686,7 +1699,7 @@ function backtestPatternI(higherCandles, lowerCandles){
     while(higherIdx+1 < higherCandles.length && new Date(higherCandles[higherIdx+1].time).getTime() <= lowerTime) higherIdx++;
     if(higherIdx < minLen-1) continue;
     const sig = detectPatternI(higherCandles.slice(0, higherIdx+1), lowerCandles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'I', time: lowerCandles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'I', time: lowerCandles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1799,7 +1812,7 @@ function backtestPatternJ(candles){
   const results = [];
   for(let i=minLen-1; i<candles.length; i++){
     const sig = detectPatternJ(candles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'J', time: candles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'J', time: candles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1878,7 +1891,7 @@ function backtestPatternK(higherCandles, lowerCandles){
     while(higherIdx+1 < higherCandles.length && new Date(higherCandles[higherIdx+1].time).getTime() <= lowerTime) higherIdx++;
     if(higherIdx < minLenHigher-1) continue;
     const sig = detectPatternK(higherCandles.slice(0, higherIdx+1), lowerCandles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'K', time: lowerCandles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'K', time: lowerCandles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -1968,7 +1981,7 @@ function backtestPatternL(higherCandles, lowerCandles){
     while(higherIdx+1 < higherCandles.length && new Date(higherCandles[higherIdx+1].time).getTime() <= lowerTime) higherIdx++;
     if(higherIdx < minLenHigher-1) continue;
     const sig = detectPatternL(higherCandles.slice(0, higherIdx+1), lowerCandles.slice(0, i+1));
-    if(sig) results.push({ direction: sig.direction, patternKey:'L', time: lowerCandles[i].time, index: i });
+    if(sig) results.push({ direction: sig.direction, patternKey:'L', time: lowerCandles[i].time, index: i, tp: sig.tp, sl: sig.sl });
   }
   return results;
 }
@@ -2436,12 +2449,121 @@ function initAutotradeUI(){
   backtestBtn.disabled = !LIVE_MODE;
   backtestBtn.addEventListener('click', runBacktest);
 
+  const pnlBacktestBtn = document.getElementById('atPnlBacktestBtn');
+  pnlBacktestBtn.disabled = !LIVE_MODE;
+  pnlBacktestBtn.addEventListener('click', runPnlBacktest);
+
   document.getElementById('atPnlResetBtn').addEventListener('click', ()=>{
     resetPnlDisplay();
     atLog('SIG', '本日の損益表示をリセットしました(実際の口座履歴・日次損失上限の判定には影響しません)。');
   });
 
   updateAutotradeUI();
+}
+
+// =========================================================
+// P&L-based backtest — unlike backtestSignals()/backtest*() above (which
+// only count how often a pattern's conditions have historically fired),
+// this walks FORWARD from each historical signal's own candle to see
+// whether its TP or SL was actually reached first, using nothing but the
+// OHLC of subsequent candles. Used by the "勝率・期待値を検証" button.
+//
+// Caveats (surfaced to the user in the result text, not hidden):
+//   - If a single candle's range covers both TP and SL, this assumes SL
+//     was touched first (can't know the true intrabar path from OHLC
+//     alone) — the standard worst-case convention for this kind of
+//     simplified backtest.
+//   - No spread/slippage/commission is modeled.
+//   - A signal with no resolution within PNL_BACKTEST_MAX_BARS is left as
+//     "open" and excluded from the win-rate/expectancy stats rather than
+//     guessed at.
+// =========================================================
+const PNL_BACKTEST_MAX_BARS = 500;
+
+function simulateSignalOutcome(candles, startIndex, direction, tp, sl){
+  const limit = Math.min(candles.length-1, startIndex+PNL_BACKTEST_MAX_BARS);
+  for(let i=startIndex+1; i<=limit; i++){
+    const c = candles[i];
+    if(direction === 'long'){
+      if(c.low <= sl) return { outcome:'loss', bars: i-startIndex };
+      if(c.high >= tp) return { outcome:'win', bars: i-startIndex };
+    } else {
+      if(c.high >= sl) return { outcome:'loss', bars: i-startIndex };
+      if(c.low <= tp) return { outcome:'win', bars: i-startIndex };
+    }
+  }
+  return { outcome:'open', bars: null };
+}
+
+async function runPnlBacktest(){
+  const btn = document.getElementById('atPnlBacktestBtn');
+  const resultEl = document.getElementById('atPnlBacktestResult');
+  btn.disabled = true;
+  resultEl.textContent = '集計中…';
+  try{
+    const defs = patternDefs();
+    const allTimeframes = [...new Set(defs.flatMap(d=>Object.values(d.timeframes)))];
+    const candlesByTf = await fetchCandlesByTimeframe(allTimeframes.map(timeframe => ({ timeframe, limit: 1000 })));
+
+    const perPattern = defs.map(def=>{
+      const byTf = {};
+      let sufficient = true;
+      for(const role of Object.keys(def.timeframes)){
+        const candles = candlesByTf[def.timeframes[role]] || [];
+        if(candles.length < 30) sufficient = false;
+        byTf[role] = candles;
+      }
+      const results = sufficient ? def.backtest(byTf) : [];
+      const simCandles = byTf.main || byTf.lower || [];
+      const outcomes = results
+        .filter(r => typeof r.tp === 'number' && typeof r.sl === 'number' && simCandles[r.index])
+        .map(r=>{
+          const sim = simulateSignalOutcome(simCandles, r.index, r.direction, r.tp, r.sl);
+          const entry = simCandles[r.index].close;
+          const risk = Math.abs(entry - r.sl);
+          const reward = Math.abs(r.tp - entry);
+          const rMultiple = sim.outcome==='win' ? (risk>0 ? reward/risk : null) : (sim.outcome==='loss' ? -1 : null);
+          return { outcome: sim.outcome, rMultiple };
+        });
+      return { def, outcomes };
+    });
+
+    const all = perPattern.flatMap(p=>p.outcomes);
+    const resolved = all.filter(o=>o.outcome !== 'open');
+    if(resolved.length === 0){
+      resultEl.textContent = '判定可能なシグナルがありませんでした(データ不足、またはどのシグナルもTP/SLに到達しませんでした)。';
+      return;
+    }
+
+    const wins = resolved.filter(o=>o.outcome==='win').length;
+    const losses = resolved.filter(o=>o.outcome==='loss').length;
+    const winRate = wins / resolved.length * 100;
+    const validR = resolved.map(o=>o.rMultiple).filter(r=>typeof r === 'number');
+    const avgR = validR.length ? validR.reduce((a,b)=>a+b,0)/validR.length : null;
+
+    const perPatternText = perPattern.map(p=>{
+      const res = p.outcomes.filter(o=>o.outcome!=='open');
+      if(res.length === 0) return `パターン${p.def.key}: 判定不可(${p.outcomes.length}件)`;
+      const w = res.filter(o=>o.outcome==='win').length;
+      const wr = w/res.length*100;
+      const rs = res.map(o=>o.rMultiple).filter(r=>typeof r==='number');
+      const ar = rs.length ? rs.reduce((a,b)=>a+b,0)/rs.length : null;
+      return `パターン${p.def.key}: 勝率${fmt(wr,1)}%(${w}/${res.length}) 期待値${ar!=null?fmt(ar,2)+'R':'---'}`;
+    }).join('\n');
+
+    resultEl.textContent =
+      `対象: ${AT.SYMBOL}\n` +
+      `総合: 勝率${fmt(winRate,1)}%(${wins}勝${losses}敗、判定不能${all.length-resolved.length}件は除く) / 期待値${avgR!=null?fmt(avgR,2)+'R':'---'}\n` +
+      `(期待値は「1トレードあたりの平均損益」を、そのトレードのリスク幅=1Rとして換算した値。0より大きければ理論上プラス、0以下ならマイナスです)\n\n` +
+      `${perPatternText}\n\n` +
+      `※TP/SLどちらが先に成立したかはローソク足のOHLCのみから判定しており、同じ足の中で両方に触れた場合は不利な側(SL)が先に成立したものとして計算しています(現実的な最悪ケース想定)。スプレッド・スリッページ・手数料は考慮していません。あくまで過去データと単純化した仮定に基づく参考値であり、将来の成績を保証するものではありません。`;
+    atLog('SIG', `損益ベースのバックテストを実行: 総合勝率${fmt(winRate,1)}%、期待値${avgR!=null?fmt(avgR,2)+'R':'---'}(${resolved.length}件判定)`);
+  }catch(err){
+    resultEl.textContent = `集計に失敗しました: ${err.message}`;
+    atLog('ERR', `損益バックテスト集計失敗: ${err.message}`);
+  }finally{
+    btn.disabled = !LIVE_MODE;
+  }
 }
 
 async function runBacktest(){

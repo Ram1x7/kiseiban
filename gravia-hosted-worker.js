@@ -142,16 +142,7 @@ async function handleDashboard(reqUrl, env) {
       ENABLED: env.AUTOTRADE_ENABLED === 'true',
       SYMBOL: env.AUTOTRADE_SYMBOL || 'USDJPY',
       TIMEFRAME: env.AUTOTRADE_TIMEFRAME || '4h',
-      LOT_SIZE: numOr(env.AUTOTRADE_LOT_SIZE, 0.01),
-      // Optional: if set (>0), lot size is computed per trade from this
-      // account-currency risk amount and the signal's SL distance, instead
-      // of always using the fixed LOT_SIZE above. See the caveat in
-      // index.html's computeRiskBasedLotSize() comment (assumes account
-      // currency == traded symbol's quote currency).
-      RISK_PER_TRADE: numOr(env.AUTOTRADE_RISK_PER_TRADE, 0),
       LOOKBACK_BARS: numOr(env.AUTOTRADE_LOOKBACK_BARS, 20),
-      MAX_OPEN_POSITIONS: numOr(env.AUTOTRADE_MAX_OPEN_POSITIONS, 1),
-      MAX_DAILY_LOSS: numOr(env.AUTOTRADE_MAX_DAILY_LOSS, 50),
       PINBAR_WICK_MULT: numOr(env.AUTOTRADE_PINBAR_WICK_MULT, 1.5),
       PINBAR_WICK_RATIO: numOr(env.AUTOTRADE_PINBAR_WICK_RATIO, 0.5),
       // Pattern I (RSI scalping) entry threshold: RSI must be above this
@@ -162,9 +153,10 @@ async function handleDashboard(reqUrl, env) {
       RSI_THRESHOLD: numOr(env.AUTOTRADE_RSI_THRESHOLD, 50),
       POLL_MS: numOr(env.AUTOTRADE_POLL_MS, 30000),
       // Comma-separated list of pattern keys (e.g. "I" or "I,K") to pull
-      // out of both live autotrade and the backtest-frequency check,
+      // out of both live signal detection and the backtest-frequency check,
       // without any code change — e.g. to pause a pattern that's
-      // empirically performing poorly in current market conditions.
+      // empirically performing poorly (negative expectancy in the P&L
+      // backtest).
       DISABLED_PATTERNS: env.AUTOTRADE_DISABLED_PATTERNS || undefined,
       // Optional per-pattern timeframe overrides (each falls back to
       // TIMEFRAME above if unset on this Worker). Undefined keys are
